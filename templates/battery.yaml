@@ -1,0 +1,41 @@
+################################################################################
+# Battery Template Sensors
+################################################################################
+#
+#   Derived sensors calculated from your battery integration sensors.
+#   Battery sensor entity IDs are read from input_text helpers so these
+#   templates work with any battery integration.
+#
+#   Set sensor_battery_soc, sensor_battery_io in configuration_example.yaml
+#   input_text section to match your battery integration.
+#
+#-------------------------------------------------------------------------------
+# Change Log
+#-------------------------------------------------------------------------------
+#   v1.0    2026-03-25    Kane Li    - Initial version
+################################################################################
+
+- sensor:
+
+    # Battery charging power in watts (positive value when charging)
+    - name: "Battery Charge Power"
+      state: >
+        {% set battery_w = states(states('input_text.sensor_battery_io')) | float(0) %}
+        {{ battery_w | abs if battery_w < 0 else 0 }}
+      unit_of_measurement: "W"
+      device_class: power
+      state_class: measurement
+
+    # Estimated time to full charge in hours
+    - name: "Battery Time to Full"
+      state: >
+        {% set soc = states(states('input_text.sensor_battery_soc')) | float(0) %}
+        {% set battery_w = states(states('input_text.sensor_battery_io')) | float(0) %}
+        {% set charge_kw = (battery_w | abs) / 1000 if battery_w < 0 else 0 %}
+        {% set capacity_kwh = states('input_number.battery_capacity_kwh') | float(10) %}
+        {% if charge_kw > 0 %}
+          {{ ((100 - soc) / 100 * capacity_kwh) / charge_kw }}
+        {% else %}
+          0
+        {% endif %}
+      unit_of_measurement: "h"

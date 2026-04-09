@@ -1,0 +1,36 @@
+################################################################################
+# SEMS Integration - HACS Auto Install
+################################################################################
+#
+#   Automatically runs install.sh whenever HACS downloads or updates the
+#   Home Assistant GoodWe SEMS Curtailment integration.
+#
+#-------------------------------------------------------------------------------
+# Change Log
+#-------------------------------------------------------------------------------
+#   v1.0    2026-04-08    Kane Li    - Initial version
+################################################################################
+
+- id: sems_hacs_auto_install
+  alias: SEMS Integration - HACS Auto Install
+  description: >
+    Runs install.sh automatically when HACS updates the SEMS integration,
+    copying files from custom_components into their /config/ locations.
+  trigger:
+    - platform: event
+      event_type: hacs_updated
+      event_data:
+        repository: "kane81/hacs-goodwe-sems-curtailment"
+  action:
+    - service: shell_command.sems_hacs_install
+      response_variable: result
+    - service: notify.notification
+      data:
+        title: "SEMS Integration Updated"
+        message: >
+          HACS update detected. Install script ran automatically.
+          {% if result.returncode == 0 %}
+          ✅ Files copied successfully. Reload YAML or restart HA to apply changes.
+          {% else %}
+          ⚠️ Install script failed. Run manually: bash /config/custom_components/sems_curtailment/install.sh
+          {% endif %}

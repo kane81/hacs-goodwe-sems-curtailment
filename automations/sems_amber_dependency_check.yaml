@@ -1,0 +1,52 @@
+################################################################################
+# SEMS Amber Dependency Check
+################################################################################
+#
+#   Checks on HA startup that hacs-custom-amber-integration is installed and
+#   actively polling prices. If Amber prices are stale or unavailable the SEMS
+#   curtailment automations cannot function correctly.
+#
+# How it works:
+#   HA starts
+#       ↓
+#   Wait 2 minutes for all integrations to initialise
+#       ↓
+#   Check amber_general_price_actual and amber_last_polled are available
+#       ↓ Missing/unavailable → send notification warning user
+#       ↓ Present → do nothing
+#
+#-------------------------------------------------------------------------------
+# Change Log
+#-------------------------------------------------------------------------------
+#   v1.0    2026-04-08    Kane Li    - Initial version
+################################################################################
+
+- id: sems_amber_dependency_check
+  alias: SEMS Amber Dependency Check
+  description: >
+    Checks on startup that hacs-custom-amber-integration is installed and
+    providing Amber price data. Notifies if dependency is missing.
+  trigger:
+    - platform: homeassistant
+      event: start
+  action:
+    # Wait for integrations to initialise before checking
+    - delay: "00:02:00"
+    - variables:
+        price_state: "{{ states('input_number.amber_general_price_actual') }}"
+        polled_state: "{{ states('input_datetime.amber_last_polled') }}"
+    - if:
+        - condition: template
+          value_template: "{{ price_state in ['unknown', 'unavailable'] or polled_state in ['unknown', 'unavailable'] }}"
+      then:
+        - service: notify.notification
+          data:
+            title: "⚠️ SEMS Curtailment — Missing Dependency"
+            message: >
+              hacs-custom-amber-integration does not appear to be installed or
+              is not yet providing price data.
+
+              SEMS curtailment automations require Amber Electric prices to function.
+              Please install hacs-custom-amber-integration from HACS first.
+
+              Repository: https://github.com/kane81/hacs-custom-amber-integration

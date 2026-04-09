@@ -1,0 +1,33 @@
+################################################################################
+# Solar Template Sensors
+################################################################################
+#
+#   Derived sensors calculated from your battery/inverter integration sensors.
+#   Sensor entity IDs are read from input_text helpers so these templates
+#   work with any battery integration.
+#
+#   Set sensor_battery_io, sensor_load in configuration_example.yaml
+#   input_text section to match your battery integration.
+#
+#-------------------------------------------------------------------------------
+# Change Log
+#-------------------------------------------------------------------------------
+#   v1.0    2026-03-25    Kane Li    - Initial version
+################################################################################
+
+- sensor:
+
+    # Inverter target output percentage based on current load and battery state
+    # Shows what percentage the curtailment automation is targeting
+    - name: "Inverter Target Percent"
+      state: >
+        {% set battery_w = states(states('input_text.sensor_battery_io')) | float(0) %}
+        {% set load_w = states(states('input_text.sensor_load')) | float(0) %}
+        {% set soc = states(states('input_text.sensor_battery_soc')) | float(0) %}
+        {% set battery_charge_w = battery_w | abs if battery_w < 0 else 0 %}
+        {% set max_battery_charge_w = states('input_number.battery_max_charge_rate_w') | float(3000) %}
+        {% set inverter_capacity_w = states('input_number.sems_inverter_capacity_w') | float(10000) %}
+        {% set floor_pct = ((max_battery_charge_w / inverter_capacity_w) * 100) | round(0) | int %}
+        {% set calculated_pct = (((load_w + battery_charge_w) / inverter_capacity_w) * 100) | round(0) | int %}
+        {{ [calculated_pct, floor_pct] | max if soc < 100 else ((load_w / inverter_capacity_w) * 100) | round(0) | int }}
+      unit_of_measurement: "%"

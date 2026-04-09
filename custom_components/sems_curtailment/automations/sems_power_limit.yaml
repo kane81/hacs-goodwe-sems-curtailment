@@ -1,0 +1,329 @@
+################################################################################
+# SEMS Power Limit based on Amber Price
+################################################################################
+#
+#   Sets the GoodWe inverter output limit based on Amber buy/sell prices.
+#   Only calls the SEMS API if the target limit has changed from the current
+#   stored value, avoiding unnecessary API calls every 5 minutes.
+#
+#   Battery sensor entity IDs are configured via input_text helpers so this
+#   automation works with any battery/inverter integration, not just AlphaESS.
+#   Set your sensor entity IDs in configuration.yaml input_text section.
+#
+# How it works:
+#   At sems_curtailment_start (default 10:00)
+#       ↓
+#   Reset inverter to 100% - clean slate before curtailment begins
+#       ↓
+#   Amber confirmed price updates (via amber_price_poll)
+#       ↓
+#   Automation enabled? (input_boolean.sems_enable_power_limit)
+#       ↓ No  → do nothing (safe exit - no API calls made)
+#       ↓ Yes
+#   Within sems_curtailment_start and sems_curtailment_end?
+#       ↓ Yes
+#   Buy price negative  → set inverter to 0%
+#   Sell SPOT negative  → curtail based on SOC
+#       SOC < 100% → target = max(load + battery charge rate, max charge floor)
+#       SOC = 100% → target = load only
+#   Prices positive     → set inverter to 100%
+#       ↓
+#   Only calls SEMS API if limit has changed from stored value
+#       ↓
+#   At sems_curtailment_end (default 17:00)
+#       ↓
+#   Reset inverter to 100% and turn off curtailment flag
+#
+# Enable / Disable:
+#   Controlled by input_boolean.sems_enable_power_limit (default OFF).
+#   This boolean is checked as a condition inside the automation so that
+#   the OFF state survives HA restarts without relying on HA's built-in
+#   enabled/disabled state (which resets on restart in some configurations).
+#   Toggle from Settings → Helpers or add to a dashboard card.
+#
+#   Note: window_start and window_end triggers (inverter reset to 100%) are
+#   always allowed through even when disabled, to ensure the inverter is
+#   never left in a curtailed state if you disable mid-session.
+#
+# Price Variables:
+#   amber_general_price_actual  - buy price $/kWh (trigger + curtailment)
+#   amber_feed_in_price_actual  - effective sell $/kWh including tariff bonuses
+#
+#-------------------------------------------------------------------------------
+# Configuration - configuration.yaml
+#-------------------------------------------------------------------------------
+#   Inverter capacity in watts - used to calculate load percentage
+#   → input_number.sems_inverter_capacity_w (default 10000)
+#
+#   Maximum battery charge rate in watts - used as minimum inverter floor
+#   → input_number.battery_max_charge_rate_w
+#
+#   Active time window
+#   → input_datetime.sems_curtailment_start (default 10:00)
+#   → input_datetime.sems_curtailment_end (default 17:00)
+#
+#   Battery sensor entity IDs - set these to your battery integration sensors
+#   → input_text.sensor_battery_soc     (e.g. sensor.my_battery_soc)
+#   → input_text.sensor_battery_io      (e.g. sensor.my_battery_power)
+#   → input_text.sensor_load            (e.g. sensor.my_house_load)
+#
+#-------------------------------------------------------------------------------
+# Dependencies
+#-------------------------------------------------------------------------------
+#   → input_number.amber_general_price_actual
+#   → input_number.amber_feed_in_price_actual
+#   → input_number.sems_inverter_capacity_w
+#   → input_number.sems_current_power_limit
+#   → input_number.battery_max_charge_rate_w
+#   → input_text.sensor_battery_soc
+#   → input_text.sensor_battery_io
+#   → input_text.sensor_load
+#   → input_boolean.sems_curtailment_active
+#   → input_boolean.sems_enable_power_limit
+#   → shell_command.sems_set_power
+#   → notify.notification  (configured in configuration_example.yaml)
+#
+#-------------------------------------------------------------------------------
+# Change Log
+#-------------------------------------------------------------------------------
+#   v1.0    2026-03-25    Kane Li    - Initial version
+#   v1.1    2026-04-01    Kane Li    - Renamed amber_curtailment_start/end to
+#                                      sems_curtailment_start/end
+#                                      Renamed amber_curtailment_active to
+#                                      sems_curtailment_active
+#   v1.2    2026-04-01    Kane Li    - Switched sell price trigger and condition
+#                                      from amber_feed_in_spot_actual to
+#                                      amber_feed_in_price_actual (effective sell
+#                                      price including tariff bonuses)
+#   v1.3    2026-04-07    Kane Li    - Changed notify.email to notify.notification
+#   v1.4    2026-04-07    Kane Li    - Added input_boolean.sems_enable_power_limit
+#                                      condition so automation can be toggled on/off
+#                                      from the HA GUI without relying on HA's
+#                                      built-in enabled state (survives restarts)
+#                                      Default state: OFF
+#                                      Window start/end resets always allowed
+#                                      through to prevent inverter being left
+#                                      curtailed if disabled mid-session
+################################################################################
+
+- id: sems_power_limit
+  alias: SEMS Power Limit based on Amber Price
+  trace:
+    stored_traces: 20
+  description: >
+    Resets inverter to 100% at curtailment window start then sets inverter
+    power limit based on Amber buy/sell prices. Resets again at window end.
+    Only calls the inverter API if the target limit has changed.
+    Battery sensors configured via input_text helpers for portability.
+    Controlled by input_boolean.sems_enable_power_limit (default OFF).
+  trigger:
+    - platform: state
+      entity_id: input_number.amber_general_price_actual
+      id: price_change
+    - platform: state
+      entity_id: input_number.amber_feed_in_price_actual
+      id: price_change
+    - platform: time
+      at: input_datetime.sems_curtailment_start
+      id: window_start
+    - platform: time
+      at: input_datetime.sems_curtailment_end
+      id: window_end
+  condition:
+    - condition: template
+      value_template: >
+        {% if trigger.id in ['window_start', 'window_end'] %}
+          true
+        {% else %}
+          {{ now().strftime('%H:%M:%S') >= states('input_datetime.sems_curtailment_start')[0:8]
+             and now().strftime('%H:%M:%S') < states('input_datetime.sems_curtailment_end')[0:8] }}
+        {% endif %}
+    - condition: template
+      value_template: "{{ states('input_number.amber_general_price_actual') not in ['unknown', 'unavailable'] }}"
+    - condition: template
+      value_template: "{{ states('input_number.amber_feed_in_price_actual') not in ['unknown', 'unavailable'] }}"
+    # Gate: only proceed for price_change triggers if this automation is enabled.
+    # Window start/end always pass through so the inverter is never left curtailed
+    # if the automation is disabled mid-session.
+    # input_boolean.sems_enable_power_limit defaults to OFF so price-based
+    # curtailment is inert until explicitly turned on from Settings → Helpers.
+    - condition: template
+      value_template: >
+        {{ trigger.id in ['window_start', 'window_end']
+           or is_state('input_boolean.sems_enable_power_limit', 'on') }}
+  action:
+    - variables:
+        inverter_capacity_w:   "{{ states('input_number.sems_inverter_capacity_w') | float(10000) }}"
+        current_limit:         "{{ states('input_number.sems_current_power_limit') | int(100) }}"
+        max_battery_charge_w:  "{{ states('input_number.battery_max_charge_rate_w') | float(4640) }}"
+        floor_pct:             "{{ ((max_battery_charge_w / inverter_capacity_w) * 100) | round(0) | int }}"
+        soc:    "{{ states(states('input_text.sensor_battery_soc')) | float(0) }}"
+        load_w: "{{ states(states('input_text.sensor_load')) | float(0) }}"
+        battery_w: "{{ states(states('input_text.sensor_battery_io')) | float(0) }}"
+        battery_charge_w: "{{ battery_w | abs if battery_w < 0 else 0 }}"
+    - choose:
+        # Window just started - reset inverter to 100% clean slate
+        - conditions:
+            - condition: trigger
+              id: window_start
+          sequence:
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.sems_curtailment_active
+            - service: shell_command.sems_set_power
+              data:
+                limit: "100"
+              response_variable: cmd_result
+            - if:
+                - condition: template
+                  value_template: "{{ cmd_result.returncode == 0 }}"
+              then:
+                - service: input_number.set_value
+                  target:
+                    entity_id: input_number.sems_current_power_limit
+                  data:
+                    value: 100
+              else:
+                # Sends via whichever notification platform is configured as
+                # notify.notification in configuration_example.yaml
+                - service: notify.notification
+                  data:
+                    title: "SEMS Window Start Reset Failed"
+                    message: >
+                      Failed to reset inverter to 100% at curtailment window start.
+                      Return code: {{ cmd_result.returncode }}
+
+        # Window just ended - reset inverter to 100% and turn off curtailment
+        - conditions:
+            - condition: trigger
+              id: window_end
+          sequence:
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.sems_curtailment_active
+            - service: shell_command.sems_set_power
+              data:
+                limit: "100"
+              response_variable: cmd_result
+            - if:
+                - condition: template
+                  value_template: "{{ cmd_result.returncode == 0 }}"
+              then:
+                - service: input_number.set_value
+                  target:
+                    entity_id: input_number.sems_current_power_limit
+                  data:
+                    value: 100
+              else:
+                - service: notify.notification
+                  data:
+                    title: "SEMS Window End Reset Failed"
+                    message: >
+                      Failed to reset inverter to 100% at curtailment window end.
+                      Return code: {{ cmd_result.returncode }}
+
+        # Buy price negative - stop all solar output
+        - conditions:
+            - condition: trigger
+              id: price_change
+            - condition: template
+              value_template: "{{ states('input_number.amber_general_price_actual') | float(0) < 0 }}"
+          sequence:
+            - service: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.sems_curtailment_active
+            - if:
+                - condition: template
+                  value_template: "{{ current_limit != 0 }}"
+              then:
+                - service: shell_command.sems_set_power
+                  data:
+                    limit: "0"
+                  response_variable: cmd_result
+                - if:
+                    - condition: template
+                      value_template: "{{ cmd_result.returncode == 0 }}"
+                  then:
+                    - service: input_number.set_value
+                      target:
+                        entity_id: input_number.sems_current_power_limit
+                      data:
+                        value: 0
+                  else:
+                    - service: notify.notification
+                      data:
+                        title: "SEMS Power Limit Failed"
+                        message: "Failed to set inverter to 0% — buy price is negative. Return code: {{ cmd_result.returncode }}"
+
+        # Sell spot negative - curtail based on SOC
+        - conditions:
+            - condition: trigger
+              id: price_change
+            - condition: template
+              value_template: "{{ states('input_number.amber_feed_in_price_actual') | float(0) < 0 }}"
+          sequence:
+            - service: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.sems_curtailment_active
+            - variables:
+                target_limit: >
+                  {% if soc >= 100 %}
+                  {{ [[((load_w / inverter_capacity_w) * 100) | round(0) | int, 1] | max, 100] | min }}
+                  {% else %}
+                  {% set calculated = (((load_w + battery_charge_w) / inverter_capacity_w) * 100) | round(0) | int %}
+                  {{ [[([calculated, floor_pct] | max), 1] | max, 100] | min }}
+                  {% endif %}
+            - if:
+                - condition: template
+                  value_template: "{{ current_limit != target_limit }}"
+              then:
+                - service: shell_command.sems_set_power
+                  data:
+                    limit: "{{ target_limit }}"
+                  response_variable: cmd_result
+                - if:
+                    - condition: template
+                      value_template: "{{ cmd_result.returncode == 0 }}"
+                  then:
+                    - service: input_number.set_value
+                      target:
+                        entity_id: input_number.sems_current_power_limit
+                      data:
+                        value: "{{ target_limit }}"
+                  else:
+                    - service: notify.notification
+                      data:
+                        title: "SEMS Power Limit Failed"
+                        message: >
+                          Failed to set inverter — sell spot negative.
+                          SOC: {{ soc }}%, Load: {{ load_w }}W, Battery: {{ battery_charge_w }}W,
+                          Floor: {{ floor_pct }}%, Target: {{ target_limit }}%.
+                          Return code: {{ cmd_result.returncode }}
+
+      default:
+        # Prices positive - restore inverter to 100%
+        - service: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.sems_curtailment_active
+        - if:
+            - condition: template
+              value_template: "{{ current_limit != 100 }}"
+          then:
+            - service: shell_command.sems_set_power
+              data:
+                limit: "100"
+              response_variable: cmd_result
+            - if:
+                - condition: template
+                  value_template: "{{ cmd_result.returncode == 0 }}"
+              then:
+                - service: input_number.set_value
+                  target:
+                    entity_id: input_number.sems_current_power_limit
+                  data:
+                    value: 100
+              else:
+                - service: notify.notification
+                  data:
+                    title: "SEMS Power Limit Failed"
+                    message: "Failed to reset inverter to 100%. Return code: {{ cmd_result.returncode }}"

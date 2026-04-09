@@ -1,0 +1,7 @@
+{
+  "name": "Home Assistant GoodWe SEMS Curtailment",
+  "render_readme": false,
+  "domains": ["automation", "input_number", "input_boolean", "input_datetime", "input_text", "notify"],
+  "homeassistant": "2024.1.0",
+  "country": ["AU"]
+}
