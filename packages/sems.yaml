@@ -187,10 +187,9 @@ input_boolean:
   # Note: window start/end inverter resets to 100% always run even when OFF
   sems_enable_power_limit:
     name: "Enable Automation: SEMS Power Limit"
-    # restore_mode: On first install defaults to off (no stored state exists).
-    # After first restart HA remembers whatever the user last set.
-    # This prevents settings resetting to default on every HA restart.
-    restore_mode: restore_default_zero
+    # No initial: — HA automatically restores the last known state on restart.
+    # On first install this defaults to off (no stored state exists yet).
+    # From then on HA remembers whatever the user last set.
     icon: mdi:solar-power
 
   # Enables real-time load tracking during curtailment
@@ -198,10 +197,9 @@ input_boolean:
   # Note: sems_enable_power_limit should also be ON for this to be meaningful
   sems_enable_load_tracking:
     name: "Enable Automation: SEMS Load Tracking"
-    # restore_mode: On first install defaults to off (no stored state exists).
-    # After first restart HA remembers whatever the user last set.
-    # This prevents settings resetting to default on every HA restart.
-    restore_mode: restore_default_zero
+    # No initial: — HA automatically restores the last known state on restart.
+    # On first install this defaults to off (no stored state exists yet).
+    # From then on HA remembers whatever the user last set.
     icon: mdi:chart-line
 
   #-----------------------------------------------------------------------------
