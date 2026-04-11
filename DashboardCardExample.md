@@ -82,6 +82,7 @@ Automation status icon legend:
 {% set force_export_active = is_state('input_boolean.amber_force_export_active',      'on') %}
 {% set ss_blocked          = is_state('input_boolean.amber_block_smart_shift_active', 'on') %}
 {% set grid_charging       = is_state('input_boolean.amber_grid_charging_active',     'on') %}
+{% set battery_offline     = is_state('input_boolean.amber_battery_offline',          'on') %}
 {# --- Derived display values --- #}
 {% set curtail_reason = 'Buy price negative — solar off, charging from grid' if buy_price < 0
    else ('Battery full — load only (' ~ load_w | round(0) | int ~ 'W)') if soc >= 100
@@ -117,6 +118,7 @@ Automation status icon legend:
 &nbsp;&nbsp;Buy **{{ (buy_price * 100) | round(0) | int }}c** &nbsp;&nbsp; Sell **{{ sell_display }}c** &nbsp;&nbsp; SOC **{{ soc | round(0) | int }}%**
 &nbsp;&nbsp;{{ '⚠️ Curtailment **ACTIVE** — Solar limited to **' ~ current_limit_pct ~ '%** — ' ~ curtail_reason if curtailment_active else '☀️ Curtailment **OFF** — Solar at **100%**' }}
 &nbsp;&nbsp;Import **${{ '%.2f' | format(import_cost / 100) }}** &nbsp;&nbsp; Export **${{ '%.2f' | format((export_earn / 100) | abs) }}** &nbsp;&nbsp; {{ '💰 Credit **$' ~ '%.2f' | format(total_earn / 100) ~ '**' if total_earn > 0 else '💸 Expense **$' ~ '%.2f' | format((total_earn / 100) | abs) ~ '**' if total_earn < 0 else '**$0.00**' }}
+{{ '&nbsp;&nbsp;⚠️ **Amber Battery Connection Offline** — check Amber app for details' if battery_offline else '' }}
 &nbsp;&nbsp;Last checked **{{ states('input_datetime.amber_last_polled') | as_timestamp | timestamp_custom('%I:%M %p') }}**
 
 **⚡ Power**
