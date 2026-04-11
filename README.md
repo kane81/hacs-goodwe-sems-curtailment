@@ -245,14 +245,6 @@ Add this as a **Markdown card** to any HA dashboard to see live power flow, Ambe
 line into the Content field
   5. Click Save
 
-Card config example:
-  type: markdown
-  content: |
-    << PASTE TEMPLATE BELOW HERE >>
-
-Note: This card uses standard HA markdown. If you want richer styling
-you can use type: custom:tailwindcss-template-card instead (requires HACS).
-
 Automation status icon legend:
   🟢  Enabled and currently active / running
   🔴  Enabled but not currently active (waiting for conditions)
@@ -263,10 +255,7 @@ Automation status icon legend:
 {% set battery_w = states(states('input_text.sensor_battery_io')) | float(0) %}
 {% set solar_w   = states(states('input_text.sensor_solar'))       | float(0) %}
 {% set load_w    = states(states('input_text.sensor_load'))        | float(0) %}
-{% set grid_w    = -(states(states('input_text.sensor_grid'))       | float(0)) %}
-{# Grid sign convention: AlphaESS reports negative=export, positive=import.
-   The card uses positive=import, negative=export so the value is negated here.
-   If your integration already uses positive=import remove the negation (-). #}
+{% set grid_w    = states(states('input_text.sensor_grid'))        | float(0) %}
 {% set soc       = states(states('input_text.sensor_battery_soc')) | float(0) %}
 {# --- Battery helpers --- #}
 {% set capacity_kwh         = states('input_number.battery_capacity_kwh')      | float(10) %}
@@ -330,7 +319,8 @@ Automation status icon legend:
 {% set ttf_str       = 'Full in ' ~ ttf_h ~ 'h ' ~ ttf_m ~ 'm — approx ' ~ ttf_finish %}
 {# --- Battery state line: pre-computed to avoid Jinja block newline issues --- #}
 {# charging = battery_w < 0, discharging = battery_w > 0, idle = 0 --- #}
-{% set bat_state = '← Charging ' ~ bat_disp ~ ' - ' ~ soc | round(0) | int ~ '% — ' ~ ttf_str if battery_w < 0
+{% set bat_state = '← Charging ' ~ bat_disp ~ ' - ' ~ soc | round(0) | int ~ '%
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' ~ ttf_str if battery_w < 0
   else '- Discharging ' ~ bat_disp ~ ' - ' ~ soc | round(0) | int ~ '%' if battery_w > 0
   else '- Idle · ' ~ soc | round(0) | int ~ '%' %}
 {# --- Automation icon logic (🚫 disabled  🔴 enabled/waiting  🟢 enabled/active) --- #}
@@ -342,10 +332,10 @@ Automation status icon legend:
 {% set ic_neg_notify    = '🚫' if not en_neg_notify    else '🟢' %}
 
 **💲 Amber**
-&nbsp;&nbsp;Buy **{{ (buy_price * 100) | round(0) | int }}c** &nbsp;&nbsp; Sell **{{ sell_display }}c** &nbsp;&nbsp; SOC **{{ soc | round(0) | int }}%**
-&nbsp;&nbsp;{{ '⚠️ Curtailment **ACTIVE** — Solar limited to **' ~ current_limit_pct ~ '%** — ' ~ curtail_reason if curtailment_active else '☀️ Curtailment **OFF** — Solar at **100%**' }}
+&nbsp;&nbsp;Buy **{{ (buy_price * 100) | round(0) | int }}c** &nbsp;&nbsp; Sell **{{ sell_display }}c**
+{{ '&nbsp;&nbsp;⚠️ **Amber Battery Connection Offline**' if battery_offline else '' }}
+&nbsp;&nbsp;{{ '⚠️ Curtailment **ACTIVE** — Solar at **' ~ current_limit_pct ~ '%** ' ~ '' if curtailment_active else '☀️ Curtailment **OFF** — Solar at **100%**' }}
 &nbsp;&nbsp;Import **${{ '%.2f' | format(import_cost / 100) }}** &nbsp;&nbsp; Export **${{ '%.2f' | format((export_earn / 100) | abs) }}** &nbsp;&nbsp; {{ '💰 Credit **$' ~ '%.2f' | format(total_earn / 100) ~ '**' if total_earn > 0 else '💸 Expense **$' ~ '%.2f' | format((total_earn / 100) | abs) ~ '**' if total_earn < 0 else '**$0.00**' }}
-{{ '&nbsp;&nbsp;⚠️ **Amber Battery Connection Offline** — check Amber app for details' if battery_offline else '' }}
 &nbsp;&nbsp;Last checked **{{ states('input_datetime.amber_last_polled') | as_timestamp | timestamp_custom('%I:%M %p') }}**
 
 **⚡ Power**
@@ -355,12 +345,12 @@ Automation status icon legend:
 &nbsp;&nbsp;{{ '⚡ Grid Consuming **' ~ grid_disp ~ '**' if grid_w > 50 else ('⚡ Grid Feed-in **' ~ grid_disp ~ '**' if grid_w < -50 else ('⚡ Grid ~0W — Solar curtailed to load' if curtailment_active else '🔋 Grid ~0W — Battery supplying load')) }}
 
 **🤖 Automations**
-&nbsp;&nbsp;{{ ic_power_limit }} **SEMS Power Limit** — Price curtailment · Window {{ sems_start }}–{{ sems_end }}{{ ' · **' ~ current_limit_pct ~ '%**' if curtailment_active else '' }}
-&nbsp;&nbsp;{{ ic_load_tracking }} **SEMS Load Tracking** — Real-time adj · Threshold {{ threshold_w | int }}W{{ ' ⚠️ needs Power Limit ON' if en_load_tracking and not en_power_limit else '' }}
-&nbsp;&nbsp;{{ ic_force_export }} **Force Export** — Min FiT {{ (min_sell_price * 100) | round(0) | int }}c · Min SOC {{ min_soc_to_sell | round(0) | int }}% · {{ fit_start }}–{{ fit_end }}
-&nbsp;&nbsp;{{ ic_block_ss }} **Block Smart Shift** — Window {{ ss_block_start }}–{{ ss_block_end }}{{ ' · Active' if ss_blocked else '' }}
-&nbsp;&nbsp;{{ ic_grid_charge }} **Grid Charge on Negative Buy** — Window {{ charge_start }}–{{ charge_end }}
-&nbsp;&nbsp;{{ ic_neg_notify }} **Negative Price Notify** — Window {{ charge_start }}–{{ charge_end }}
+&nbsp;&nbsp;{{ ic_power_limit }} **SEMS Curtailment** -  {{ sems_start }}-{{ sems_end }}{{ ' · **' ~ current_limit_pct ~ '%**' if curtailment_active else '' }}
+&nbsp;&nbsp;{{ ic_load_tracking }} **SEMS Load Realtime Adj** - Threshold {{ threshold_w | int }}W{{ ' ⚠️ needs Power Limit ON' if en_load_tracking and not en_power_limit else '' }}
+&nbsp;&nbsp;{{ ic_force_export }} **Export** - FiT {{ (min_sell_price * 100) | round(0) | int }}c · Min SOC {{ min_soc_to_sell | round(0) | int }}% · {{ fit_start }}–{{ fit_end }}
+&nbsp;&nbsp;{{ ic_block_ss }} **Block Smart Shift** - {{ ss_block_start }}–{{ ss_block_end }}{{ ' · Active' if ss_blocked else '' }}
+&nbsp;&nbsp;{{ ic_grid_charge }} **Grid Charge on Negative Buy** - {{ charge_start }}-{{ charge_end }}
+&nbsp;&nbsp;{{ ic_neg_notify }} **Negative Price Notify** - {{ charge_start }}–{{ charge_end }}
 ```
 
 ---
@@ -372,6 +362,28 @@ python3 /config/scripts/sems_power.py 100   # Reset inverter to full output
 python3 /config/scripts/sems_power.py 50    # Set to 50%
 python3 /config/scripts/sems_power.py 0     # Set to 0% (effectively off)
 ```
+
+---
+
+## Internal State Helpers
+
+The integration uses several helpers as internal state flags — they are set and cleared automatically by automations and should not be toggled manually.
+
+| Helper | Purpose |
+|---|---|
+| `sems_curtailment_active` | Set when price curtailment is active |
+| `sems_current_power_limit` | Tracks the last inverter power limit set (%) |
+
+### Hiding them from the UI
+
+The install script hides these automatically using the HA entity registry API. If for any reason they are still visible, you can hide them manually:
+
+1. Go to **Settings → Devices & Services → Entities**
+2. Search for the helper name (e.g. `sems_curtailment_active`)
+3. Click the entity → click the **⚙️ cog icon**
+4. Toggle **Hidden** to on → **Update**
+
+Hidden helpers still function normally — automations can still read and write them. They just won't appear in Settings → Helpers or on dashboards.
 
 ---
 
