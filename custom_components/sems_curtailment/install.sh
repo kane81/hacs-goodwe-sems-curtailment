@@ -49,6 +49,33 @@ cp -v $SRC/templates/*.yaml /config/templates/
 
 
 # -----------------------------------------------------------------------------
+# Set automation enable booleans to OFF on first install
+# -----------------------------------------------------------------------------
+echo ""
+echo "🔧 Setting automation enable booleans to OFF..."
+
+set_boolean_off() {
+    local entity_id=$1
+    if [ -z "$HA_TOKEN" ]; then
+        echo "   - $entity_id (skipped — no token yet)"
+        return
+    fi
+    result=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+        "$HA_URL/api/services/input_boolean/turn_off" \
+        -H "Authorization: Bearer $HA_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{\"entity_id\": \"$entity_id\"}")
+    if [ "$result" = "200" ]; then
+        echo "   ✅ OFF: $entity_id"
+    else
+        echo "   ⚠️  Could not set $entity_id (HTTP $result)"
+    fi
+}
+
+set_boolean_off "input_boolean.sems_enable_power_limit"
+set_boolean_off "input_boolean.sems_enable_load_tracking"
+
+# -----------------------------------------------------------------------------
 # Hide internal state flag helpers from the HA UI
 # These are set/cleared by automations and should not be toggled manually.
 # Hiding prevents user confusion — they still work, just not visible in Helpers.
