@@ -45,6 +45,7 @@ Automation status icon legend:
 {% set buy_price    = states('input_number.amber_general_price_actual')  | float(0) %}
 {% set sell_price   = states('input_number.amber_feed_in_price_actual')  | float(0) %}
 {% set sell_display = (sell_price * 100) | round(0) | int if sell_price >= 0 else (sell_price * 100) | round(0, 'floor') | int %}
+{% set amber_soc    = states('input_number.amber_battery_soc')           | float(0) %}
 {% set import_cost  = states('input_number.amber_import_cost_cents')     | float(0) %}
 {% set export_earn  = states('input_number.amber_export_earnings_cents') | float(0) %}
 {% set total_earn   = states('input_number.amber_total_earnings_cents')  | float(0) %}
@@ -104,7 +105,7 @@ Automation status icon legend:
 {% set ic_neg_notify    = '🚫' if not en_neg_notify    else '🟢' %}
 
 **💲 Amber**
-&nbsp;&nbsp;Buy **{{ (buy_price * 100) | round(0) | int }}c** &nbsp;&nbsp; Sell **{{ sell_display }}c**
+&nbsp;&nbsp;Buy **{{ (buy_price * 100) | round(0) | int }}c** &nbsp;&nbsp; Sell **{{ sell_display }}c** &nbsp;&nbsp; Amber SOC **{{ '⚠️' if battery_offline else (amber_soc | round(0) | int ~ '%') }}**
 {{ '&nbsp;&nbsp;⚠️ **Amber Battery Connection Offline**' if battery_offline else '' }}
 &nbsp;&nbsp;{{ '⚠️ Curtailment **ACTIVE** — Solar at **' ~ current_limit_pct ~ '%** ' ~ '' if curtailment_active else '☀️ Curtailment **OFF** — Solar at **100%**' }}
 &nbsp;&nbsp;Import **${{ '%.2f' | format(import_cost / 100) }}** &nbsp;&nbsp; Export **${{ '%.2f' | format((export_earn / 100) | abs) }}** &nbsp;&nbsp; {{ '💰 Credit **$' ~ '%.2f' | format(total_earn / 100) ~ '**' if total_earn > 0 else '💸 Expense **$' ~ '%.2f' | format((total_earn / 100) | abs) ~ '**' if total_earn < 0 else '**$0.00**' }}

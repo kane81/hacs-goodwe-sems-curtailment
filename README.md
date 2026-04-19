@@ -40,7 +40,7 @@ This project uses the SEMS Portal API which is not publicly documented or offici
 | **Window management** | Resets inverter to 100% at window start and end — clean slate every day |
 | **Amber dependency check** | Notifies on startup if hacs-custom-amber-integration is not providing price data |
 
-Both automations are **off by default** — enable them individually from Settings → Helpers once you have verified the integration is working.
+Both automations are **off by default** — enable them individually from Settings → Devices & Services → Helpers tab once you have verified the integration is working.
 
 ---
 
@@ -133,13 +133,13 @@ Save with **Ctrl+S**.
 
 **Settings → System → Restart**
 
-> ⚠️ **Every HA restart resets helpers to their initial values.** All automation enable toggles will reset to OFF and sensor configurations will reset to placeholders. After each restart you will need to re-enable automations and re-set sensor entity IDs via Settings → Helpers.
+> ⚠️ **Every HA restart resets helpers to their initial values.** All automation enable toggles will reset to OFF and sensor configurations will reset to placeholders. After each restart you will need to re-enable automations and re-set sensor entity IDs via Settings → Devices & Services → Helpers tab.
 
 ---
 
 ### Step 4 — Configure Battery Sensors
 
-Go to **Settings → Helpers** and set the five `Sensor -` helpers to point to your battery integration's entity IDs:
+Go to **Settings → Devices & Services → Helpers tab** and set the five `Sensor -` helpers to point to your battery integration's entity IDs:
 
 | Helper | Set to |
 |---|---|
@@ -158,7 +158,19 @@ Also set:
 
 ---
 
-### Step 5 — Test the Script
+### Step 5 — Set Up the Dashboard Card
+
+Add the dashboard card now so you have a live visual of power flow, Amber prices and automation states before enabling anything. This makes it much easier to see what's working.
+
+1. Edit your dashboard → **Add Card** → **Markdown**
+2. Paste the template from the **Dashboard Card** section below
+3. Save
+
+Once added the card shows live solar, battery, load and grid readings, Amber prices, curtailment status and all automation toggle states at a glance.
+
+---
+
+### Step 6 — Test the Script
 
 Open **Terminal & SSH** and run:
 
@@ -187,9 +199,9 @@ python3 /config/scripts/sems_power.py 100
 
 ---
 
-### Step 6 — Enable Automations
+### Step 7 — Enable Automations
 
-Both automations are **off by default**. Enable via **Settings → Helpers**:
+Both automations are **off by default**. Enable via **Settings → Devices & Services → Helpers tab**:
 
 | Helper | Enables | Default |
 |---|---|---|
@@ -213,9 +225,9 @@ All settings adjustable without editing YAML.
 3. Select the **Helpers** tab
 4. Find and update the helper — changes take effect immediately
 
-### Option B — Settings → Helpers
+### Option B — Settings → Devices & Services → Helpers tab
 
-Go to **Settings → Helpers**, find the helper by name and click to edit.
+Go to **Settings → Devices & Services → Helpers tab**, find the helper by name and click to edit.
 
 ### Settings
 
@@ -272,6 +284,7 @@ Automation status icon legend:
 {% set buy_price    = states('input_number.amber_general_price_actual')  | float(0) %}
 {% set sell_price   = states('input_number.amber_feed_in_price_actual')  | float(0) %}
 {% set sell_display = (sell_price * 100) | round(0) | int if sell_price >= 0 else (sell_price * 100) | round(0, 'floor') | int %}
+{% set amber_soc    = states('input_number.amber_battery_soc')           | float(0) %}
 {% set import_cost  = states('input_number.amber_import_cost_cents')     | float(0) %}
 {% set export_earn  = states('input_number.amber_export_earnings_cents') | float(0) %}
 {% set total_earn   = states('input_number.amber_total_earnings_cents')  | float(0) %}
@@ -332,7 +345,7 @@ Automation status icon legend:
 {% set ic_neg_notify    = '🚫' if not en_neg_notify    else '🟢' %}
 
 **💲 Amber**
-&nbsp;&nbsp;Buy **{{ (buy_price * 100) | round(0) | int }}c** &nbsp;&nbsp; Sell **{{ sell_display }}c**
+&nbsp;&nbsp;Buy **{{ (buy_price * 100) | round(0) | int }}c** &nbsp;&nbsp; Sell **{{ sell_display }}c** &nbsp;&nbsp; Amber SOC **{{ '⚠️' if battery_offline else (amber_soc | round(0) | int ~ '%') }}**
 {{ '&nbsp;&nbsp;⚠️ **Amber Battery Connection Offline**' if battery_offline else '' }}
 &nbsp;&nbsp;{{ '⚠️ Curtailment **ACTIVE** — Solar at **' ~ current_limit_pct ~ '%** ' ~ '' if curtailment_active else '☀️ Curtailment **OFF** — Solar at **100%**' }}
 &nbsp;&nbsp;Import **${{ '%.2f' | format(import_cost / 100) }}** &nbsp;&nbsp; Export **${{ '%.2f' | format((export_earn / 100) | abs) }}** &nbsp;&nbsp; {{ '💰 Credit **$' ~ '%.2f' | format(total_earn / 100) ~ '**' if total_earn > 0 else '💸 Expense **$' ~ '%.2f' | format((total_earn / 100) | abs) ~ '**' if total_earn < 0 else '**$0.00**' }}
@@ -383,7 +396,7 @@ The install script hides these automatically using the HA entity registry API. I
 3. Click the entity → click the **⚙️ cog icon**
 4. Toggle **Hidden** to on → **Update**
 
-Hidden helpers still function normally — automations can still read and write them. They just won't appear in Settings → Helpers or on dashboards.
+Hidden helpers still function normally — automations can still read and write them. They just won't appear in Settings → Devices & Services → Helpers tab or on dashboards.
 
 ---
 
@@ -395,9 +408,9 @@ Hidden helpers still function normally — automations can still read and write 
 
 **Inverter not responding** — check `sems_inverter_sn` matches the serial number on your inverter label exactly. Verify inverter is online in the SEMS+ app.
 
-**Curtailment not firing** — confirm `sems_enable_power_limit` is ON in Settings → Helpers. Check the automation trace — the condition block shows exactly why it exited early.
+**Curtailment not firing** — confirm `sems_enable_power_limit` is ON in Settings → Devices & Services → Helpers tab. Check the automation trace — the condition block shows exactly why it exited early.
 
-**Load tracking not adjusting** — confirm `sems_enable_load_tracking` is ON. Check sensor helper entity IDs are set correctly in Settings → Helpers.
+**Load tracking not adjusting** — confirm `sems_enable_load_tracking` is ON. Check sensor helper entity IDs are set correctly in Settings → Devices & Services → Helpers tab.
 
 **After any config change** — Developer Tools → YAML → Reload All (or restart HA).
 
