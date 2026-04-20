@@ -76,6 +76,60 @@ set_boolean_off "input_boolean.sems_enable_power_limit"
 set_boolean_off "input_boolean.sems_enable_load_tracking"
 
 # -----------------------------------------------------------------------------
+# Set default values for user-configurable helpers on first install
+# Without initial: set, input_number defaults to min value on first load.
+# The script sets sensible defaults via the HA API on first install.
+# On subsequent restarts HA restores the user's last set value.
+# -----------------------------------------------------------------------------
+echo ""
+echo "🔧 Setting default values for configurable helpers..."
+
+set_number() {
+    local entity_id=$1
+    local value=$2
+    if [ -z "$HA_TOKEN" ]; then
+        echo "   - $entity_id = $value (skipped — no token yet)"
+        return
+    fi
+    result=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+        "$HA_URL/api/services/input_number/set_value" \
+        -H "Authorization: Bearer $HA_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{\"entity_id\": \"$entity_id\", \"value\": $value}")
+    if [ "$result" = "200" ]; then
+        echo "   ✅ $entity_id = $value"
+    else
+        echo "   ⚠️  Could not set $entity_id (HTTP $result)"
+    fi
+}
+
+set_datetime() {
+    local entity_id=$1
+    local value=$2
+    if [ -z "$HA_TOKEN" ]; then
+        echo "   - $entity_id = $value (skipped — no token yet)"
+        return
+    fi
+    result=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+        "$HA_URL/api/services/input_datetime/set_datetime" \
+        -H "Authorization: Bearer $HA_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{\"entity_id\": \"$entity_id\", \"time\": \"$value\"}")
+    if [ "$result" = "200" ]; then
+        echo "   ✅ $entity_id = $value"
+    else
+        echo "   ⚠️  Could not set $entity_id (HTTP $result)"
+    fi
+}
+
+set_number "input_number.sems_inverter_capacity_w" 10000
+set_number "input_number.sems_load_threshold_watts" 500
+set_number "input_number.battery_capacity_kwh" 10
+set_number "input_number.battery_max_charge_rate_w" 3000
+set_datetime "input_datetime.sems_curtailment_start" "10:00:00"
+set_datetime "input_datetime.sems_curtailment_end" "17:00:00"
+
+# -----------------------------------------------------------------------------
 # Hide internal state flag helpers from the HA UI
 # These are set/cleared by automations and should not be toggled manually.
 # Hiding prevents user confusion — they still work, just not visible in Helpers.

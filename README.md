@@ -139,22 +139,32 @@ Save with **Ctrl+S**.
 
 ### Step 4 — Configure Battery Sensors
 
-Go to **Settings → Devices & Services → Helpers tab** and set the five `Sensor -` helpers to point to your battery integration's entity IDs:
+Go to **Overview → Devices → Helpers tab** and configure the following helpers. All values persist across restarts — you only need to set these once.
 
-| Helper | Set to |
-|---|---|
-| **Sensor - Battery SOC** | Your battery SOC sensor entity ID |
-| **Sensor - Battery I/O Power** | Your battery power sensor (negative=charging) |
-| **Sensor - House Load** | Your house load sensor in watts |
-| **Sensor - Solar Power** | Your solar production sensor in watts |
-| **Sensor - Grid Power** | Your grid power sensor (see note below) |
+#### Sensor Entity IDs
 
-> **AlphaESS grid sensor note:** Use `sensor.al7011025073833_instantaneous_grid_i_o_total`. AlphaESS reports negative=export — the dashboard card negates this automatically.
+Set each `Sensor -` helper to the entity ID from your battery integration:
 
-Also set:
-- **Battery Max Charge Rate** → your battery's max charge rate in watts (AlphaESS Smile5: 4640W)
-- **Battery Capacity** → your battery's usable capacity in kWh
-- **SEMS Inverter Capacity** → your inverter's rated capacity in watts
+| Helper | What to set it to | AlphaESS example |
+|---|---|---|
+| **Sensor - Battery SOC** | Battery state of charge (0–100%) | `sensor.al7011025073833_instantaneous_battery_soc` |
+| **Sensor - Battery I/O Power** | Battery power — negative=charging, positive=discharging | `sensor.al7011025073833_instantaneous_battery_i_o` |
+| **Sensor - House Load** | House load in watts | `sensor.al7011025073833_instantaneous_load` |
+| **Sensor - Solar Power** | Solar production in watts | `sensor.al7011025073833_instantaneous_generation` |
+| **Sensor - Grid Power** | Grid power — see note below | `sensor.al7011025073833_instantaneous_grid_i_o_total` |
+
+> **AlphaESS grid sensor note:** AlphaESS reports negative=export. The dashboard card handles the sign convention automatically.
+
+#### System Settings
+
+| Helper | Default | Set to |
+|---|---|---|
+| **Battery Max Charge Rate** | 3000W | Your battery's maximum charge rate in watts. AlphaESS Smile5: **4640W**. Check your battery spec sheet. |
+| **Battery Capacity** | 10 kWh | Your battery's usable capacity in kWh. Used for time-to-full estimate only. |
+| **SEMS Inverter Capacity** | 10000W | Your GoodWe inverter's rated output in watts. e.g. GW10K-MS = **10000W**. |
+| **SEMS Curtailment Start** | 10:00 | Start of curtailment monitoring window |
+| **SEMS Curtailment End** | 17:00 | End of curtailment monitoring window |
+| **SEMS Load Change Threshold** | 500W | Min watts change before updating inverter via API. Lower = more responsive. |
 
 ---
 

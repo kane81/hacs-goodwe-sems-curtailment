@@ -83,11 +83,7 @@ input_number:
     min: 0
     max: 30000
     step: 500
-    # ⚠️ After your first HA restart, remove the initial: line below.
-    # With initial: present HA resets this value on every restart, wiping
-    # any changes you made via Settings → Helpers.
-    # Without initial: HA restores the last value you set.
-    initial: 10000
+    # No initial: — HA restores the last value you set after first install.
     unit_of_measurement: W
 
   # Tracks the last successfully set inverter power limit (%)
@@ -109,11 +105,7 @@ input_number:
     min: 0
     max: 5000
     step: 100
-    # ⚠️ After your first HA restart, remove the initial: line below.
-    # With initial: present HA resets this value on every restart, wiping
-    # any changes you made via Settings → Helpers.
-    # Without initial: HA restores the last value you set.
-    initial: 500
+    # No initial: — HA restores the last value you set after first install.
     unit_of_measurement: W
 
   # Battery usable capacity in kWh
@@ -123,11 +115,7 @@ input_number:
     min: 0
     max: 100
     step: 0.1
-    # ⚠️ After your first HA restart, remove the initial: line below.
-    # With initial: present HA resets this value on every restart, wiping
-    # any changes you made via Settings → Helpers.
-    # Without initial: HA restores the last value you set.
-    initial: 10
+    # No initial: — HA restores the last value you set after first install.
     unit_of_measurement: kWh
 
   # Maximum battery charge rate in watts
@@ -138,11 +126,7 @@ input_number:
     min: 0
     max: 10000
     step: 100
-    # ⚠️ After your first HA restart, remove the initial: line below.
-    # With initial: present HA resets this value on every restart, wiping
-    # any changes you made via Settings → Helpers.
-    # Without initial: HA restores the last value you set.
-    initial: 3000
+    # No initial: — HA restores the last value you set after first install.
     unit_of_measurement: W
 
 ################################################################################
@@ -155,22 +139,14 @@ input_datetime:
     name: SEMS Curtailment Start
     has_date: false
     has_time: true
-    # ⚠️ After your first HA restart, remove the initial: line below.
-    # With initial: present HA resets this value on every restart, wiping
-    # any changes you made via Settings → Helpers.
-    # Without initial: HA restores the last value you set.
-    initial: "10:00:00"
+    # No initial: — HA restores the last value you set after first install.
 
   # End of curtailment window — inverter resets to 100% at this time
   sems_curtailment_end:
     name: SEMS Curtailment End
     has_date: false
     has_time: true
-    # ⚠️ After your first HA restart, remove the initial: line below.
-    # With initial: present HA resets this value on every restart, wiping
-    # any changes you made via Settings → Helpers.
-    # Without initial: HA restores the last value you set.
-    initial: "17:00:00"
+    # No initial: — HA restores the last value you set after first install.
 
 ################################################################################
 # Input Booleans
