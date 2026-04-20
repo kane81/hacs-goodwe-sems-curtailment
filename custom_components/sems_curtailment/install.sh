@@ -10,6 +10,7 @@
 #   bash /config/custom_components/sems_curtailment/install.sh
 #
 # Safe to re-run — existing files are overwritten, nothing is deleted.
+# User-configured helper values are never overwritten on update.
 # =============================================================================
 
 set -e
@@ -47,111 +48,96 @@ echo "📄 Copying templates..."
 mkdir -p /config/templates
 cp -v $SRC/templates/*.yaml /config/templates/
 
-
 # -----------------------------------------------------------------------------
-# Set automation enable booleans to OFF on first install
+# Load HA credentials — needed for all API calls below
 # -----------------------------------------------------------------------------
-echo ""
-echo "🔧 Setting automation enable booleans to OFF..."
-
-set_boolean_off() {
-    local entity_id=$1
-    if [ -z "$HA_TOKEN" ]; then
-        echo "   - $entity_id (skipped — no token yet)"
-        return
-    fi
-    result=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-        "$HA_URL/api/services/input_boolean/turn_off" \
-        -H "Authorization: Bearer $HA_TOKEN" \
-        -H "Content-Type: application/json" \
-        -d "{\"entity_id\": \"$entity_id\"}")
-    if [ "$result" = "200" ]; then
-        echo "   ✅ OFF: $entity_id"
-    else
-        echo "   ⚠️  Could not set $entity_id (HTTP $result)"
-    fi
-}
-
-set_boolean_off "input_boolean.sems_enable_power_limit"
-set_boolean_off "input_boolean.sems_enable_load_tracking"
-
-# -----------------------------------------------------------------------------
-# Set default values for user-configurable helpers on first install
-# Without initial: set, input_number defaults to min value on first load.
-# The script sets sensible defaults via the HA API on first install.
-# On subsequent restarts HA restores the user's last set value.
-# -----------------------------------------------------------------------------
-echo ""
-echo "🔧 Setting default values for configurable helpers..."
-
-set_number() {
-    local entity_id=$1
-    local value=$2
-    if [ -z "$HA_TOKEN" ]; then
-        echo "   - $entity_id = $value (skipped — no token yet)"
-        return
-    fi
-    result=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-        "$HA_URL/api/services/input_number/set_value" \
-        -H "Authorization: Bearer $HA_TOKEN" \
-        -H "Content-Type: application/json" \
-        -d "{\"entity_id\": \"$entity_id\", \"value\": $value}")
-    if [ "$result" = "200" ]; then
-        echo "   ✅ $entity_id = $value"
-    else
-        echo "   ⚠️  Could not set $entity_id (HTTP $result)"
-    fi
-}
-
-set_datetime() {
-    local entity_id=$1
-    local value=$2
-    if [ -z "$HA_TOKEN" ]; then
-        echo "   - $entity_id = $value (skipped — no token yet)"
-        return
-    fi
-    result=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-        "$HA_URL/api/services/input_datetime/set_datetime" \
-        -H "Authorization: Bearer $HA_TOKEN" \
-        -H "Content-Type: application/json" \
-        -d "{\"entity_id\": \"$entity_id\", \"time\": \"$value\"}")
-    if [ "$result" = "200" ]; then
-        echo "   ✅ $entity_id = $value"
-    else
-        echo "   ⚠️  Could not set $entity_id (HTTP $result)"
-    fi
-}
-
-set_number "input_number.sems_inverter_capacity_w" 10000
-set_number "input_number.sems_load_threshold_watts" 500
-set_number "input_number.battery_capacity_kwh" 10
-set_number "input_number.battery_max_charge_rate_w" 3000
-set_datetime "input_datetime.sems_curtailment_start" "10:00:00"
-set_datetime "input_datetime.sems_curtailment_end" "17:00:00"
-
-# -----------------------------------------------------------------------------
-# Hide internal state flag helpers from the HA UI
-# These are set/cleared by automations and should not be toggled manually.
-# Hiding prevents user confusion — they still work, just not visible in Helpers.
-# -----------------------------------------------------------------------------
-echo ""
-echo "🙈 Hiding internal state flag helpers..."
-
 SECRETS=/config/secrets.yaml
 HA_URL=$(grep "^ha_url:" $SECRETS 2>/dev/null | sed 's/ha_url: *//' | tr -d '"' || echo "http://localhost:8123")
-HA_TOKEN=$(grep "^ha_long_lived_token:" $SECRETS | sed 's/ha_long_lived_token: *//' | tr -d '"')
+HA_TOKEN=$(grep "^ha_long_lived_token:" $SECRETS 2>/dev/null | sed 's/ha_long_lived_token: *//' | tr -d '"')
 
 if [ -z "$HA_TOKEN" ]; then
-    echo "   ⚠️  ha_long_lived_token not found in secrets.yaml — skipping auto-hide"
-    echo "   You can hide these manually via Settings → Entities → search → Hidden toggle:"
+    echo ""
+    echo "⚠️  ha_long_lived_token not found in secrets.yaml"
+    echo "   Skipping helper configuration — run install.sh again after adding your token."
 fi
 
+# -----------------------------------------------------------------------------
+# Helper functions
+# -----------------------------------------------------------------------------
+
+# Get current state of an entity — returns empty string if unavailable
+get_state() {
+    local entity_id=$1
+    [ -z "$HA_TOKEN" ] && echo "" && return
+    curl -s \
+        "$HA_URL/api/states/$entity_id" \
+        -H "Authorization: Bearer $HA_TOKEN" | \
+        python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('state',''))" 2>/dev/null || echo ""
+}
+
+# Set an input_number — only if current state is unavailable or matches default
+set_number_if_default() {
+    local entity_id=$1
+    local default_value=$2
+    local description=$3
+    [ -z "$HA_TOKEN" ] && echo "   - $entity_id (skipped — no token)" && return
+
+    current=$(get_state "$entity_id")
+    if [ -z "$current" ] || [ "$current" = "unavailable" ] || [ "$current" = "unknown" ]; then
+        # Entity has no stored state — first install, set default
+        curl -s -o /dev/null -X POST \
+            "$HA_URL/api/services/input_number/set_value" \
+            -H "Authorization: Bearer $HA_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"entity_id\": \"$entity_id\", \"value\": $default_value}"
+        echo "   ✅ $description set to $default_value (first install default)"
+    else
+        echo "   ⏭️  $description already set to $current — keeping user value"
+    fi
+}
+
+# Set an input_datetime — only if no stored state
+set_datetime_if_default() {
+    local entity_id=$1
+    local default_value=$2
+    local description=$3
+    [ -z "$HA_TOKEN" ] && echo "   - $entity_id (skipped — no token)" && return
+
+    current=$(get_state "$entity_id")
+    if [ -z "$current" ] || [ "$current" = "unavailable" ] || [ "$current" = "unknown" ]; then
+        curl -s -o /dev/null -X POST \
+            "$HA_URL/api/services/input_datetime/set_datetime" \
+            -H "Authorization: Bearer $HA_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"entity_id\": \"$entity_id\", \"time\": \"$default_value\"}"
+        echo "   ✅ $description set to $default_value (first install default)"
+    else
+        echo "   ⏭️  $description already set to $current — keeping user value"
+    fi
+}
+
+# Set a boolean OFF — only on first install (no stored state)
+set_boolean_off_if_new() {
+    local entity_id=$1
+    [ -z "$HA_TOKEN" ] && echo "   - $entity_id (skipped — no token)" && return
+
+    current=$(get_state "$entity_id")
+    if [ -z "$current" ] || [ "$current" = "unavailable" ] || [ "$current" = "unknown" ]; then
+        curl -s -o /dev/null -X POST \
+            "$HA_URL/api/services/input_boolean/turn_off" \
+            -H "Authorization: Bearer $HA_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"entity_id\": \"$entity_id\"}"
+        echo "   ✅ OFF: $entity_id (first install default)"
+    else
+        echo "   ⏭️  $entity_id already $current — keeping user value"
+    fi
+}
+
+# Hide an entity in the HA UI
 hide_entity() {
     local entity_id=$1
-    if [ -z "$HA_TOKEN" ]; then
-        echo "   - $entity_id"
-        return
-    fi
+    [ -z "$HA_TOKEN" ] && echo "   - $entity_id (skipped — no token)" && return
     result=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH \
         "$HA_URL/api/config/entity_registry/$entity_id" \
         -H "Authorization: Bearer $HA_TOKEN" \
@@ -160,9 +146,36 @@ hide_entity() {
     if [ "$result" = "200" ]; then
         echo "   ✅ Hidden: $entity_id"
     else
-        echo "   ⚠️  Could not hide $entity_id (HTTP $result) — hide manually if needed"
+        echo "   ⚠️  Could not hide $entity_id (HTTP $result)"
     fi
 }
+
+# -----------------------------------------------------------------------------
+# Set automation enable booleans to OFF (first install only)
+# -----------------------------------------------------------------------------
+echo ""
+echo "🔧 Setting automation enable booleans..."
+set_boolean_off_if_new "input_boolean.sems_enable_power_limit"
+set_boolean_off_if_new "input_boolean.sems_enable_load_tracking"
+
+# -----------------------------------------------------------------------------
+# Set default values for configurable helpers (first install only)
+# On HACS updates these are skipped — user values are preserved
+# -----------------------------------------------------------------------------
+echo ""
+echo "🔧 Setting default values for configurable helpers..."
+set_number_if_default   "input_number.sems_inverter_capacity_w"  10000  "SEMS Inverter Capacity"
+set_number_if_default   "input_number.sems_load_threshold_watts" 500    "SEMS Load Threshold"
+set_number_if_default   "input_number.battery_capacity_kwh"      10     "Battery Capacity"
+set_number_if_default   "input_number.battery_max_charge_rate_w" 3000   "Battery Max Charge Rate"
+set_datetime_if_default "input_datetime.sems_curtailment_start"  "10:00:00" "Curtailment Start"
+set_datetime_if_default "input_datetime.sems_curtailment_end"    "17:00:00" "Curtailment End"
+
+# -----------------------------------------------------------------------------
+# Hide internal state flag helpers from the HA UI
+# -----------------------------------------------------------------------------
+echo ""
+echo "🙈 Hiding internal state flag helpers..."
 hide_entity "input_boolean.sems_curtailment_active"
 hide_entity "input_number.sems_current_power_limit"
 
@@ -172,7 +185,6 @@ echo " Checking configuration.yaml"
 echo "============================================="
 echo ""
 
-# Check automation dir merge line
 if grep -q "include_dir_merge_list automations" $CONFIG; then
     echo "✅ automation: !include_dir_merge_list automations/ — found"
 else
@@ -186,7 +198,6 @@ else
     ERRORS=$((ERRORS + 1))
 fi
 
-# Check packages line
 if grep -q "include_dir_named packages" $CONFIG; then
     echo "✅ packages: !include_dir_named packages/ — found"
 else
@@ -198,7 +209,6 @@ else
     ERRORS=$((ERRORS + 1))
 fi
 
-# Check Amber dependency
 echo ""
 echo "============================================="
 echo " Checking Amber dependency"
@@ -226,7 +236,7 @@ if [ $ERRORS -eq 0 ]; then
     echo "  1. Add your SEMS credentials to /config/secrets.yaml"
     echo "  2. Reload: Developer Tools → YAML → Reload All"
     echo "     Or restart: Settings → System → Restart"
-    echo "  3. Configure sensor helpers via Settings → Helpers"
+    echo "  3. Configure sensor helpers via Overview → Devices → Helpers"
     echo "  4. Test: python3 /config/scripts/sems_power.py 100"
     echo ""
     echo " ⚡ Future HACS updates will run this script automatically"
