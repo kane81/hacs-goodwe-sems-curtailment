@@ -1,5 +1,5 @@
 ################################################################################
-# SEMS Power Limit based on Amber Price
+# SEMS Solar Curtailment based on Amber Price
 ################################################################################
 #
 #   Sets the GoodWe inverter output limit based on Amber buy/sell prices.
@@ -107,7 +107,7 @@
 ################################################################################
 
 - id: sems_power_limit
-  alias: SEMS Power Limit based on Amber Price
+  alias: SEMS Solar Curtailment based on Amber Price
   trace:
     stored_traces: 20
   description: >
@@ -252,7 +252,7 @@
                   else:
                     - service: notify.notification
                       data:
-                        title: "SEMS Power Limit Failed"
+                        title: "SEMS Solar Curtailment Failed"
                         message: "Failed to set inverter to 0% — buy price is negative. Return code: {{ cmd_result.returncode }}"
 
         # Sell spot negative - curtail based on SOC
@@ -293,7 +293,7 @@
                   else:
                     - service: notify.notification
                       data:
-                        title: "SEMS Power Limit Failed"
+                        title: "SEMS Solar Curtailment Failed"
                         message: >
                           Failed to set inverter — sell spot negative.
                           SOC: {{ soc }}%, Load: {{ load_w }}W, Battery: {{ battery_charge_w }}W,
@@ -325,5 +325,5 @@
               else:
                 - service: notify.notification
                   data:
-                    title: "SEMS Power Limit Failed"
+                    title: "SEMS Solar Curtailment Failed"
                     message: "Failed to reset inverter to 100%. Return code: {{ cmd_result.returncode }}"

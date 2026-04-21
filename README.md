@@ -215,12 +215,12 @@ Both automations are **off by default**. Enable via **Settings → Devices & Ser
 
 | Helper | Enables | Default |
 |---|---|---|
-| `sems_enable_power_limit` | Price-based curtailment | OFF |
-| `sems_enable_load_tracking` | Real-time load adjustment | OFF |
+| **Enable Automation: SEMS Solar Curtailment** | Price-based inverter curtailment | OFF |
+| **Enable Automation: SEMS Load Tracking Adjustments** | Real-time load adjustment during curtailment | OFF |
 
-Enable `sems_enable_power_limit` first. Only enable `sems_enable_load_tracking` once power limit is working correctly — load tracking fine-tunes limits that power limit sets.
+Enable **SEMS Solar Curtailment** first. Only enable **SEMS Load Tracking Adjustments** once curtailment is working correctly — load tracking fine-tunes the inverter limit in real time based on changing house load.
 
-> ⚠️ Automation toggles reset to OFF on every HA restart. Re-enable after each restart.
+> **Tip:** The dashboard card shows the live state of both automations — 🟢 active · 🔴 enabled/waiting · 🚫 disabled. Use **Overview → Devices → Helpers** to toggle them on/off.
 
 ---
 
@@ -418,9 +418,9 @@ Hidden helpers still function normally — automations can still read and write 
 
 **Inverter not responding** — check `sems_inverter_sn` matches the serial number on your inverter label exactly. Verify inverter is online in the SEMS+ app.
 
-**Curtailment not firing** — confirm `sems_enable_power_limit` is ON in Settings → Devices & Services → Helpers tab. Check the automation trace — the condition block shows exactly why it exited early.
+**Curtailment not firing** — confirm **Enable Automation: SEMS Solar Curtailment** is ON in Overview → Devices → Helpers. Check the automation trace — the condition block shows exactly why it exited early.
 
-**Load tracking not adjusting** — confirm `sems_enable_load_tracking` is ON. Check sensor helper entity IDs are set correctly in Settings → Devices & Services → Helpers tab.
+**Load tracking not adjusting** — confirm **Enable Automation: SEMS Load Tracking Adjustments** is ON. Check sensor helper entity IDs are set correctly in Overview → Devices → Helpers.
 
 **After any config change** — Developer Tools → YAML → Reload All (or restart HA).
 

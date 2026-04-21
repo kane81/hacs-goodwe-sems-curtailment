@@ -162,7 +162,7 @@ input_boolean:
   # Default: OFF — turn ON to activate curtailment based on Amber prices
   # Note: window start/end inverter resets to 100% always run even when OFF
   sems_enable_power_limit:
-    name: "Enable Automation: SEMS Power Limit"
+    name: "Enable Automation: SEMS Solar Curtailment"
     # No initial: — HA restores last known state on restart.
     # On first install the script sets these to off via the HA API.
     # From then on HA remembers whatever the user last set.
@@ -172,7 +172,7 @@ input_boolean:
   # Default: OFF — turn ON to activate real-time inverter adjustment
   # Note: sems_enable_power_limit should also be ON for this to be meaningful
   sems_enable_load_tracking:
-    name: "Enable Automation: SEMS Load Tracking"
+    name: "Enable Automation: SEMS Load Tracking Adjustments"
     # No initial: — HA restores last known state on restart.
     # On first install the script sets these to off via the HA API.
     # From then on HA remembers whatever the user last set.
