@@ -18,8 +18,9 @@
     copying files from custom_components into their /config/ locations.
   trigger:
     - platform: event
-      event_type: hacs_updated
+      event_type: hacs/repository
       event_data:
+        action: download
         repository: "kane81/hacs-goodwe-sems-curtailment"
   action:
     - service: shell_command.sems_hacs_install
