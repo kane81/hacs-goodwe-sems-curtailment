@@ -144,8 +144,11 @@
         target_limit: >
           {% if soc >= 100 %}
           {{ [[((load_w / inverter_capacity_w) * 100) | round(0) | int, 1] | max, 100] | min }}
-          {% else %}
+          {% elif soc >= 95 %}
           {% set calculated = (((load_w + battery_charge_w) / inverter_capacity_w) * 100) | round(0) | int %}
+          {{ [[([calculated, floor_pct] | max), 1] | max, 100] | min }}
+          {% else %}
+          {% set calculated = (((load_w + max_battery_charge_w) / inverter_capacity_w) * 100) | round(0) | int %}
           {{ [[([calculated, floor_pct] | max), 1] | max, 100] | min }}
           {% endif %}
         current_limit_w: "{{ (current_limit / 100) * inverter_capacity_w }}"
