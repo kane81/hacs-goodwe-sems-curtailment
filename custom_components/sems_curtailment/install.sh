@@ -15,6 +15,9 @@
 
 set -e
 
+# Mode: "full" (default) runs full install. "sync" just copies files.
+MODE=${1:-full}
+
 SRC=/config/custom_components/sems_curtailment
 CONFIG=/config/configuration.yaml
 ERRORS=0

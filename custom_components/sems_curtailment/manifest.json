@@ -1,10 +1,12 @@
 {
   "domain": "sems_curtailment",
   "name": "Home Assistant GoodWe SEMS Curtailment",
-  "version": "1.1.0",
+  "version": "1.0.12",
   "documentation": "https://github.com/kane81/hacs-goodwe-sems-curtailment",
   "issue_tracker": "https://github.com/kane81/hacs-goodwe-sems-curtailment/issues",
-  "codeowners": ["@kane81"],
+  "codeowners": [
+    "@kane81"
+  ],
   "requirements": [],
   "iot_class": "cloud_polling"
 }

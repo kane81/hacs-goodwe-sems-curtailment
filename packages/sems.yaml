@@ -30,7 +30,7 @@ shell_command:
 
   # Runs the install script to copy integration files after a HACS update
   # Called automatically by sems_hacs_auto_install automation
-  sems_hacs_install: "bash /config/custom_components/sems_curtailment/install.sh"
+  sems_hacs_install: "bash /config/custom_components/sems_curtailment/install.sh {{ mode | default('full') }}"
 
 ################################################################################
 # Input Text
