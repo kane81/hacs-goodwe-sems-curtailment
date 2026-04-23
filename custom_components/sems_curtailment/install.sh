@@ -162,9 +162,10 @@ set_boolean_off_if_new "input_boolean.sems_enable_power_limit"
 set_boolean_off_if_new "input_boolean.sems_enable_load_tracking"
 
 # -----------------------------------------------------------------------------
-# Set default values for configurable helpers (first install only)
-# On HACS updates these are skipped — user values are preserved
+# Set default values for configurable helpers (first install / full mode only)
+# Skipped on startup sync to avoid overwriting user values during HA boot
 # -----------------------------------------------------------------------------
+if [ "$MODE" = "full" ]; then
 echo ""
 echo "🔧 Setting default values for configurable helpers..."
 set_number_if_default   "input_number.sems_inverter_capacity_w"  10000  "SEMS Inverter Capacity"
@@ -173,6 +174,8 @@ set_number_if_default   "input_number.battery_capacity_kwh"      10     "Battery
 set_number_if_default   "input_number.battery_max_charge_rate_w" 3000   "Battery Max Charge Rate"
 set_datetime_if_default "input_datetime.sems_curtailment_start"  "10:00:00" "Curtailment Start"
 set_datetime_if_default "input_datetime.sems_curtailment_end"    "17:00:00" "Curtailment End"
+
+fi  # end MODE=full
 
 # -----------------------------------------------------------------------------
 # Hide internal state flag helpers from the HA UI
