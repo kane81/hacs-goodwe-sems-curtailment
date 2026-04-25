@@ -1,4 +1,4 @@
-# <img src="brand/icon.png" width="60" style="vertical-align:middle"/> Home Assistant GoodWe SEMS Curtailment
+<table><tr><td><img src="brand/icon.png" width="80"/></td><td><h1>Home Assistant GoodWe SEMS Curtailment</h1></td></tr></table>
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 [![GitHub release](https://img.shields.io/github/release/kane81/hacs-goodwe-sems-curtailment.svg)](https://github.com/kane81/hacs-goodwe-sems-curtailment/releases)
