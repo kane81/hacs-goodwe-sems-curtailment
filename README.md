@@ -367,7 +367,7 @@ Automation status icon legend:
 &nbsp;&nbsp;🔋 Battery {{ bat_state }}
 &nbsp;&nbsp;☀️ Solar **{{ solar_disp }}**
 &nbsp;&nbsp;🏠 Load **{{ load_disp }}**
-&nbsp;&nbsp;{{ '⚡ Grid Consuming **' ~ grid_disp ~ '**' if grid_w > 50 else ('⚡ Grid Feed-in **' ~ grid_disp ~ '**' if grid_w < -50 else ('⚡ Grid ~0W — Solar curtailed to load' if curtailment_active else '🔋 Grid ~0W — Battery supplying load')) }}
+&nbsp;&nbsp;{{ '⚡ Grid Consuming **' ~ grid_disp ~ '**' if grid_w > 5 else ('⚡ Grid Feed-in **' ~ grid_disp ~ '**' if grid_w < -5 else ('⚡ Grid ~0W — Solar curtailed to load' if curtailment_active else '⚡ Grid ~0W')) }}
 
 **🤖 Automations**
 &nbsp;&nbsp;{{ ic_power_limit }} **SEMS Curtailment** -  {{ sems_start }}-{{ sems_end }}{{ ' · **' ~ current_limit_pct ~ '%**' if curtailment_active else '' }}
