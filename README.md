@@ -264,15 +264,6 @@ Add this as a **Markdown card** to any HA dashboard to see live power flow, Ambe
 **Icon legend:** 🟢 enabled & active · 🔴 enabled, waiting for conditions · 🚫 disabled
 
 ```jinja
-line into the Content field
-  5. Click Save
-
-Automation status icon legend:
-  🟢  Enabled and currently active / running
-  🔴  Enabled but not currently active (waiting for conditions)
-  🚫  Disabled — automation enable boolean is OFF, will not run
-=========================================================================
-#}
 {# --- Power sensors (entity IDs configured via input_text helpers) --- #}
 {% set battery_w = states(states('input_text.sensor_battery_io')) | float(0) %}
 {% set solar_w   = states(states('input_text.sensor_solar'))       | float(0) %}
