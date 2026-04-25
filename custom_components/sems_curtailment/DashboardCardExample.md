@@ -56,8 +56,6 @@ Automation status icon legend:
 {% set fit_end         = states('input_datetime.amber_force_sell_on_custom_fit_end')    [0:5] %}
 {% set ss_block_start  = states('input_datetime.amber_block_smart_shift_start')         [0:5] %}
 {% set ss_block_end    = states('input_datetime.amber_block_smart_shift_end')           [0:5] %}
-{% set charge_start    = states('input_datetime.amber_charge_on_negative_start')        [0:5] %}
-{% set charge_end      = states('input_datetime.amber_charge_on_negative_end')          [0:5] %}
 {% set sems_start      = states('input_datetime.sems_curtailment_start')                [0:5] %}
 {% set sems_end        = states('input_datetime.sems_curtailment_end')                  [0:5] %}
 {# --- Automation enable flags (input_boolean, default OFF, survives restarts) --- #}
@@ -65,13 +63,17 @@ Automation status icon legend:
 {% set en_load_tracking = is_state('input_boolean.sems_enable_load_tracking',           'on') %}
 {% set en_force_export  = is_state('input_boolean.amber_enable_force_export_custom_fit','on') %}
 {% set en_block_ss      = is_state('input_boolean.amber_enable_block_smart_shift',      'on') %}
-{% set en_grid_charge   = is_state('input_boolean.amber_enable_charge_on_negative_buy', 'on') %}
 {% set en_neg_notify    = is_state('input_boolean.amber_enable_negative_price_notify',  'on') %}
+{% set en_force_charge     = is_state('input_boolean.amber_enable_force_charge_custom_rate', 'on') %}
+{% set force_charge_active = is_state('input_boolean.amber_force_charge_active',           'on') %}
+{% set fc_start        = states('input_datetime.amber_force_charge_start')[0:5] %}
+{% set fc_end          = states('input_datetime.amber_force_charge_end')[0:5] %}
+{% set max_buy_price   = states('input_number.amber_max_buy_price_to_charge') | float(0.05) %}
+{% set max_soc_charge  = states('input_number.amber_max_soc_to_charge') | float(100) %}
 {# --- Automation session state flags (set/cleared by automations themselves) --- #}
 {% set curtailment_active  = is_state('input_boolean.sems_curtailment_active',        'on') %}
 {% set force_export_active = is_state('input_boolean.amber_force_export_active',      'on') %}
 {% set ss_blocked          = is_state('input_boolean.amber_block_smart_shift_active', 'on') %}
-{% set grid_charging       = is_state('input_boolean.amber_grid_charging_active',     'on') %}
 {% set battery_offline     = is_state('input_boolean.amber_battery_offline',          'on') %}
 {# --- Derived display values --- #}
 {% set curtail_reason = 'Buy price negative — solar off, charging from grid' if buy_price < 0
@@ -101,8 +103,8 @@ Automation status icon legend:
 {% set ic_load_tracking = '🚫' if (not en_load_tracking or not en_power_limit) else ('🟢' if curtailment_active else '🔴') %}
 {% set ic_force_export  = '🚫' if not en_force_export  else ('🟢' if force_export_active else '🔴') %}
 {% set ic_block_ss      = '🚫' if not en_block_ss      else ('🟢' if ss_blocked          else '🔴') %}
-{% set ic_grid_charge   = '🚫' if not en_grid_charge   else ('🟢' if grid_charging        else '🔴') %}
 {% set ic_neg_notify    = '🚫' if not en_neg_notify    else '🟢' %}
+{% set ic_force_charge  = '⚠️' if (battery_offline and en_force_charge) else ('🚫' if not en_force_charge else ('🟢' if force_charge_active else '🔴')) %}
 
 **💲 Amber**
 &nbsp;&nbsp;Buy **{{ (buy_price * 100) | round(0) | int }}c** &nbsp;&nbsp; Sell **{{ sell_display }}c** &nbsp;&nbsp; Amber SOC **{{ '⚠️' if battery_offline else (amber_soc | round(0) | int ~ '%') }}**
@@ -121,6 +123,6 @@ Automation status icon legend:
 &nbsp;&nbsp;{{ ic_power_limit }} **SEMS Curtailment** -  {{ sems_start }}-{{ sems_end }}{{ ' · **' ~ current_limit_pct ~ '%**' if curtailment_active else '' }}
 &nbsp;&nbsp;{{ ic_load_tracking }} **SEMS Load Realtime Adj** - Threshold {{ threshold_w | int }}W{{ ' ⚠️ needs Power Limit ON' if en_load_tracking and not en_power_limit else '' }}
 &nbsp;&nbsp;{{ ic_force_export }} **Export** - FiT {{ (min_sell_price * 100) | round(0) | int }}c · Min SOC {{ min_soc_to_sell | round(0) | int }}% · {{ fit_start }}–{{ fit_end }}
+&nbsp;&nbsp;{{ ic_force_charge }} **Charge** - <= 5c · Max SOC {{ max_soc_charge | int }}% · {{ fc_start }}–{{ fc_end }}
 &nbsp;&nbsp;{{ ic_block_ss }} **Block Smart Shift** - {{ ss_block_start }}–{{ ss_block_end }}{{ ' · Active' if ss_blocked else '' }}
-&nbsp;&nbsp;{{ ic_grid_charge }} **Grid Charge on Negative Buy** - {{ charge_start }}-{{ charge_end }}
-&nbsp;&nbsp;{{ ic_neg_notify }} **Negative Price Notify** - {{ charge_start }}–{{ charge_end }}
+&nbsp;&nbsp;{{ ic_neg_notify }} **Negative Price Notify**

@@ -313,6 +313,12 @@ Automation status icon legend:
 {% set en_force_export  = is_state('input_boolean.amber_enable_force_export_custom_fit','on') %}
 {% set en_block_ss      = is_state('input_boolean.amber_enable_block_smart_shift',      'on') %}
 {% set en_neg_notify    = is_state('input_boolean.amber_enable_negative_price_notify',  'on') %}
+{% set en_force_charge     = is_state('input_boolean.amber_enable_force_charge_custom_rate', 'on') %}
+{% set force_charge_active = is_state('input_boolean.amber_force_charge_active',           'on') %}
+{% set fc_start        = states('input_datetime.amber_force_charge_start')[0:5] %}
+{% set fc_end          = states('input_datetime.amber_force_charge_end')[0:5] %}
+{% set max_buy_price   = states('input_number.amber_max_buy_price_to_charge') | float(0.05) %}
+{% set max_soc_charge  = states('input_number.amber_max_soc_to_charge') | float(100) %}
 {# --- Automation session state flags (set/cleared by automations themselves) --- #}
 {% set curtailment_active  = is_state('input_boolean.sems_curtailment_active',        'on') %}
 {% set force_export_active = is_state('input_boolean.amber_force_export_active',      'on') %}
@@ -348,6 +354,7 @@ Automation status icon legend:
 {% set ic_force_export  = '🚫' if not en_force_export  else ('🟢' if force_export_active else '🔴') %}
 {% set ic_block_ss      = '🚫' if not en_block_ss      else ('🟢' if ss_blocked          else '🔴') %}
 {% set ic_neg_notify    = '🚫' if not en_neg_notify    else '🟢' %}
+{% set ic_force_charge  = '⚠️' if (battery_offline and en_force_charge) else ('🚫' if not en_force_charge else ('🟢' if force_charge_active else '🔴')) %}
 
 **💲 Amber**
 &nbsp;&nbsp;Buy **{{ (buy_price * 100) | round(0) | int }}c** &nbsp;&nbsp; Sell **{{ sell_display }}c** &nbsp;&nbsp; Amber SOC **{{ '⚠️' if battery_offline else (amber_soc | round(0) | int ~ '%') }}**
@@ -366,6 +373,7 @@ Automation status icon legend:
 &nbsp;&nbsp;{{ ic_power_limit }} **SEMS Curtailment** -  {{ sems_start }}-{{ sems_end }}{{ ' · **' ~ current_limit_pct ~ '%**' if curtailment_active else '' }}
 &nbsp;&nbsp;{{ ic_load_tracking }} **SEMS Load Realtime Adj** - Threshold {{ threshold_w | int }}W{{ ' ⚠️ needs Power Limit ON' if en_load_tracking and not en_power_limit else '' }}
 &nbsp;&nbsp;{{ ic_force_export }} **Export** - FiT {{ (min_sell_price * 100) | round(0) | int }}c · Min SOC {{ min_soc_to_sell | round(0) | int }}% · {{ fit_start }}–{{ fit_end }}
+&nbsp;&nbsp;{{ ic_force_charge }} **Charge** - <= 5c · Max SOC {{ max_soc_charge | int }}% · {{ fc_start }}–{{ fc_end }}
 &nbsp;&nbsp;{{ ic_block_ss }} **Block Smart Shift** - {{ ss_block_start }}–{{ ss_block_end }}{{ ' · Active' if ss_blocked else '' }}
 &nbsp;&nbsp;{{ ic_neg_notify }} **Negative Price Notify**
 ```
