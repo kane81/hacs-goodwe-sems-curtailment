@@ -170,6 +170,8 @@ Set each `Sensor -` helper to the entity ID from your battery integration:
 
 ### Step 5 — Set Up the Dashboard Card
 
+![Dashboard Card](images/dashboard_card.png)
+
 Add the dashboard card now so you have a live visual of power flow, Amber prices and automation states before enabling anything. This makes it much easier to see what's working.
 
 1. Edit your dashboard → **Add Card** → **Markdown**
@@ -363,8 +365,8 @@ Add this as a **Markdown card** to any HA dashboard to see live power flow, Ambe
 **🤖 Automations**
 &nbsp;&nbsp;{{ ic_power_limit }} **SEMS Curtailment** -  {{ sems_start }}-{{ sems_end }}{{ ' · **' ~ current_limit_pct ~ '%**' if curtailment_active else '' }}
 &nbsp;&nbsp;{{ ic_load_tracking }} **SEMS Load Realtime Adj** - Threshold {{ threshold_w | int }}W{{ ' ⚠️ needs Power Limit ON' if en_load_tracking and not en_power_limit else '' }}
-&nbsp;&nbsp;{{ ic_force_export }} **Export** - >= {{ (min_sell_price * 100) | round(0) | int }}c · Min SOC {{ min_soc_to_sell | round(0) | int }}% · {{ fit_start }}–{{ fit_end }}
-&nbsp;&nbsp;{{ ic_force_charge }} **Charge** - <= 5c · Max SOC {{ max_soc_charge | int }}% · {{ fc_start }}–{{ fc_end }}
+&nbsp;&nbsp;{{ ic_force_export }} **Export** >= {{ (min_sell_price * 100) | round(0) | int }}c · Min SOC {{ min_soc_to_sell | round(0) | int }}% · {{ fit_start }}–{{ fit_end }}
+&nbsp;&nbsp;{{ ic_force_charge }} **Charge** <= 5c · Max SOC {{ max_soc_charge | int }}% · {{ fc_start }}–{{ fc_end }}
 &nbsp;&nbsp;{{ ic_block_ss }} **Block Smart Shift** - {{ ss_block_start }}–{{ ss_block_end }}{{ ' · Active' if ss_blocked else '' }}
 &nbsp;&nbsp;{{ ic_neg_notify }} **Negative Price Notify**
 ```
