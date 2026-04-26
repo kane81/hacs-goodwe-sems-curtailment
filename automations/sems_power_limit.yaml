@@ -123,6 +123,9 @@
     - platform: state
       entity_id: input_number.amber_feed_in_price_actual
       id: price_change
+    - platform: state
+      entity_id: input_datetime.amber_last_polled
+      id: price_change
     - platform: time_pattern
       minutes: "/5"
       id: price_change
