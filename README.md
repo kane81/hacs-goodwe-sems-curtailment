@@ -144,13 +144,6 @@ Add the dashboard card now so you have a live visual of power flow, Amber prices
 4. Click **+ Add Card**
 5. Search for and select **Markdown**
 6. Paste the full card template below into the Content field
-7. Click **Save**
-
-## Dashboard Card
-
-Add this as a **Markdown card** to any HA dashboard to see live power flow, Amber prices, curtailment status and all automation states at a glance.
-
-**Icon legend:** 🟢 enabled & active · 🔴 enabled, waiting for conditions · 🚫 disabled · ⚠️ blocked
 
 ```jinja
 {# --- Power sensors (entity IDs configured via input_text helpers) --- #}
@@ -252,6 +245,35 @@ Add this as a **Markdown card** to any HA dashboard to see live power flow, Ambe
 &nbsp;&nbsp;{{ ic_block_ss }} **Block Smart Shift** - {{ ss_block_start }}–{{ ss_block_end }}{{ ' · Active' if ss_blocked else '' }}
 &nbsp;&nbsp;{{ ic_neg_notify }} **Negative Price Notify**
 ```
+7. Click **Save**
+
+**Icon legend:** 🟢 enabled & active · 🔴 enabled, waiting for conditions · 🚫 disabled · ⚠️ blocked
+
+Once added the card shows live solar, battery, load and grid readings, Amber prices, curtailment status and all automation states at a glance.
+
+#### Optional — Add Entity Controls to the Dashboard
+
+Add toggle and number controls directly to your dashboard so you can control automations and adjust settings without navigating to Helpers. The automations in **Settings → Automations** should always remain enabled — control is via the **Enable Automation** toggles below.
+
+For each group below, add an **Entities** card and include the listed entities.
+
+> **Tip:** You can adjust the width of entity cards in edit mode — click the card → drag the resize handle, or use **Layout** options to set columns.
+
+---
+
+**SEMS Solar Curtailment** — curtails inverter based on Amber sell/buy price
+- `Enable Automation: SEMS Solar Curtailment`
+- `SEMS Curtailment Start`
+- `SEMS Curtailment End`
+- `SEMS Load Change Threshold`
+
+---
+
+**SEMS Load Tracking Adjustments** — real-time inverter adjustment as house load changes during curtailment
+- `Enable Automation: SEMS Load Tracking Adjustments`
+
+---
+
 
 ---
 
@@ -283,31 +305,6 @@ Restore to full output:
 ```bash
 python3 /config/scripts/sems_power.py 100
 ```
-
----
-
-Once added the card shows live solar, battery, load and grid readings, Amber prices, curtailment status and all automation states at a glance.
-
-#### Optional — Add Entity Controls to the Dashboard
-
-Add toggle and number controls directly to your dashboard so you can control automations and adjust settings without navigating to Helpers. The automations in **Settings → Automations** should always remain enabled — control is via the **Enable Automation** toggles below.
-
-For each group below, add an **Entities** card and include the listed entities.
-
-> **Tip:** You can adjust the width of entity cards in edit mode — click the card → drag the resize handle, or use **Layout** options to set columns.
-
----
-
-**SEMS Solar Curtailment** — curtails inverter based on Amber sell/buy price
-- `Enable Automation: SEMS Solar Curtailment`
-- `SEMS Curtailment Start`
-- `SEMS Curtailment End`
-- `SEMS Load Change Threshold`
-
----
-
-**SEMS Load Tracking Adjustments** — real-time inverter adjustment as house load changes during curtailment
-- `Enable Automation: SEMS Load Tracking Adjustments`
 
 ## Manual Commands
 
