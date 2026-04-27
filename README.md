@@ -1,5 +1,8 @@
 <table><tr><td><img src="brand/icon.png" width="80"/></td><td><h1>Home Assistant GoodWe SEMS Curtailment</h1></td></tr></table>
 
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow?logo=buy-me-a-coffee)](https://www.buymeacoffee.com/kane81)
+
+
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 [![GitHub release](https://img.shields.io/github/release/kane81/hacs-goodwe-sems-curtailment.svg)](https://github.com/kane81/hacs-goodwe-sems-curtailment/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -12,15 +15,6 @@
 ## ⚠️ Requires hacs-custom-amber-integration
 
 **This integration depends on [hacs-custom-amber-integration](https://github.com/kane81/hacs-custom-amber-integration).** It reads the Amber Electric price helpers populated by that project. Install and configure that project first before proceeding.
-
----
-
-## 🚧 Early Beta — In Development
-
-- Automations may behave unexpectedly in edge cases
-- Breaking changes may occur between versions
-- Monitor your system closely after installation
-- Feedback welcome via [GitHub Issues](https://github.com/kane81/hacs-goodwe-sems-curtailment/issues)
 
 ---
 
@@ -40,43 +34,17 @@ This project uses the SEMS Portal API which is not publicly documented or offici
 | **Window management** | Resets inverter to 100% at window start and end — clean slate every day |
 | **Amber dependency check** | Notifies on startup if hacs-custom-amber-integration is not providing price data |
 
-Both automations are **off by default** — enable them individually from Settings → Devices & Services → Helpers tab once you have verified the integration is working.
-
----
-
-## Architecture
-
-```mermaid
-flowchart TD
-    AmberPrices["💲 Amber Electric Prices\namber_general_price_actual\namber_feed_in_price_actual"]
-    BatterySensors["🔋 Battery Sensors\nSOC · Load · Battery I/O\n(via input_text helpers)"]
-    PowerLimit["⚙️ sems_power_limit.yaml\nPrice-based curtailment"]
-    LoadTracking["📊 sems_load_tracking.yaml\nReal-time load tracking"]
-    SEMSScript["🐍 sems_power.py\nSEMS Portal API client"]
-    SEMSAPI["☁️ SEMS Portal API\nau.semsportal.com"]
-    Inverter["☀️ GoodWe Inverter\nActivePowerLimit"]
-
-    AmberPrices --> PowerLimit
-    BatterySensors --> PowerLimit
-    BatterySensors --> LoadTracking
-    PowerLimit -->|curtailment active flag| LoadTracking
-    PowerLimit --> SEMSScript
-    LoadTracking --> SEMSScript
-    SEMSScript --> SEMSAPI
-    SEMSAPI --> Inverter
-```
-
 ---
 
 ## Installation
 
-### Step 0 — Install hacs-custom-amber-integration First
+### Step 1 — Install hacs-custom-amber-integration First
 
 This integration will not function without Amber Electric prices being available in HA. If you haven't already, install and configure [hacs-custom-amber-integration](https://github.com/kane81/hacs-custom-amber-integration) first and verify prices are updating before continuing.
 
 ---
 
-### Step 1 — Add via HACS
+### Step 2 — Add via HACS
 
 1. Open **HACS** in your HA sidebar
 2. Click **⋮** (top right) → **Custom repositories**
@@ -103,37 +71,31 @@ The script will:
 ✅ Install complete!
 ```
 
-If you see any ⚠️ warnings, follow the instructions printed by the script before continuing.
-
 > **After this first run** the `sems_hacs_auto_install` automation is active. All future HACS updates will run the install script automatically.
 
 ---
 
-### Step 2 — Add SEMS Credentials
+### Step 3 — Add SEMS Credentials
 
-Open **Studio Code Server** from the sidebar and open `/config/secrets.yaml`.
+#### Step 3a — Get your SEMS credentials
 
-Add the following:
-
-```yaml
-sems_email: "your@email.com"
-sems_password: "your-sems-password"
-sems_inverter_sn: "YOUR_INVERTER_SERIAL"
-```
-
-Save with **Ctrl+S**.
+You will need the email and password you use to log into [au.semsportal.com](https://au.semsportal.com) and your inverter serial number.
 
 **Finding your inverter serial number:**
 - Printed on the label on your physical inverter
 - Also visible in **SEMS+ app → Device → Device Info**
 
----
+#### Step 3b — Add credentials to secrets.yaml
 
-### Step 3 — Restart HA
+Open **Studio Code Server** from the sidebar and open `/config/secrets.yaml`. Add:
 
-**Settings → System → Restart**
+```yaml
+sems_email: "your-email-you-use-to-login-to-sems-portal"
+sems_password: "your-password-you-use-to-login-to-sems-portal"
+sems_inverter_sn: "YOUR_INVERTER_SERIAL"
+```
 
-> ⚠️ **Every HA restart resets helpers to their initial values.** All automation enable toggles will reset to OFF and sensor configurations will reset to placeholders. After each restart you will need to re-enable automations and re-set sensor entity IDs via Settings → Devices & Services → Helpers tab.
+Save with **Ctrl+S**.
 
 ---
 
@@ -166,25 +128,83 @@ Set each `Sensor -` helper to the entity ID from your battery integration:
 | **SEMS Curtailment End** | 17:00 | End of curtailment monitoring window |
 | **SEMS Load Change Threshold** | 500W | Min watts change before updating inverter via API. Lower = more responsive. |
 
+> **No battery?** Set **Battery Max Charge Rate** to **0W**. Curtailment will limit the inverter to house load only, effectively turning off solar export when prices are negative.
+
 ---
 
-### Step 5 — Set Up the Dashboard Card
+### Step 5 — Add Dashboard Card
 
 ![Dashboard Card](images/dashboard_card.png)
 
-Add the dashboard card now so you have a live visual of power flow, Amber prices and automation states before enabling anything. This makes it much easier to see what's working.
+Add the dashboard card now so you have a live visual of power flow, Amber prices and automation states straight away.
 
-1. Edit your dashboard → **Add Card** → **Markdown**
-2. Paste the template from the **Dashboard Card** section below
-3. Save
+1. Go to **Overview** in the HA sidebar
+2. Click the **⋮** menu (top right) → **Edit dashboard**
+3. If you want a dedicated dashboard: click **⋮** → **Manage dashboards** → **Add dashboard** → **New dashboard from scratch** → give it a name → **Create** → open it from the sidebar and click **Edit**
+4. Click **+ Add Card**
+5. Search for and select **Markdown**
+6. Paste the full card template from the **Dashboard Card** section below into the Content field
+7. Click **Save**
 
-Once added the card shows live solar, battery, load and grid readings, Amber prices, curtailment status and all automation toggle states at a glance.
+Once added the card shows live solar, battery, load and grid readings, Amber prices, curtailment status and all automation states at a glance.
+
+#### Optional — Add Entity Controls to the Dashboard
+
+Add toggle and number controls directly to your dashboard so you can control automations and adjust settings without navigating to Helpers. The automations in **Settings → Automations** should always remain enabled — control is via the **Enable Automation** toggles below.
+
+For each group below, add an **Entities** card and include the listed entities.
+
+> **Tip:** You can adjust the width of entity cards in edit mode — click the card → drag the resize handle, or use **Layout** options to set columns.
+
+---
+
+**SEMS Solar Curtailment** — curtails inverter based on Amber sell/buy price
+- `Enable Automation: SEMS Solar Curtailment`
+- `SEMS Curtailment Start`
+- `SEMS Curtailment End`
+- `SEMS Load Change Threshold`
+
+---
+
+**SEMS Load Tracking Adjustments** — real-time inverter adjustment as house load changes during curtailment
+- `Enable Automation: SEMS Load Tracking Adjustments`
+
+---
+
+**Force Export** — discharges battery to grid when sell price is at or above your threshold
+- `Enable Automation: Force Export`
+- `Amber Min Sell Price`
+- `Amber Min SOC to Sell`
+- `Amber Force Sell Start`
+- `Amber Force Sell End`
+
+---
+
+**Force Charge** — charges battery from grid when buy price is at or below your threshold; switches to preserve mode at max SOC
+- `Enable Automation: Force Charge`
+- `Amber Max Buy Price`
+- `Amber Max SOC to Charge`
+- `Amber Force Charge Start`
+- `Amber Force Charge End`
+
+---
+
+**Block Smart Shift** — disables Smart Shift overnight to preserve battery charge for peak periods
+- `Enable Automation: Block Smart Shift`
+- `Amber Block Smart Shift Start`
+- `Amber Block Smart Shift End`
+
+---
+
+**Notifications**
+- `Enable Automation: Force Export Notifications`
+- `Enable Automation: Negative Price Notify`
 
 ---
 
 ### Step 6 — Test the Script
 
-Open **Terminal & SSH** and run:
+Optional — run these commands in **Terminal & SSH** to verify your credentials and inverter connection are working.
 
 ```bash
 python3 /config/scripts/sems_power.py 100
@@ -211,59 +231,11 @@ python3 /config/scripts/sems_power.py 100
 
 ---
 
-### Step 7 — Enable Automations
-
-Both automations are **off by default**. Enable via **Settings → Devices & Services → Helpers tab**:
-
-| Helper | Enables | Default |
-|---|---|---|
-| **Enable Automation: SEMS Solar Curtailment** | Price-based inverter curtailment | OFF |
-| **Enable Automation: SEMS Load Tracking Adjustments** | Real-time load adjustment during curtailment | OFF |
-
-Enable **SEMS Solar Curtailment** first. Only enable **SEMS Load Tracking Adjustments** once curtailment is working correctly — load tracking fine-tunes the inverter limit in real time based on changing house load.
-
-> **Tip:** The dashboard card shows the live state of both automations — 🟢 active · 🔴 enabled/waiting · 🚫 disabled. Use **Overview → Devices → Helpers** to toggle them on/off.
-
----
-
-## Configuration
-
-All settings adjustable without editing YAML.
-
-### Option A — Overview → Devices & Services (recommended)
-
-1. Go to your **Overview** dashboard
-2. Click **Devices & Services** (top right)
-3. Select the **Helpers** tab
-4. Find and update the helper — changes take effect immediately
-
-### Option B — Settings → Devices & Services → Helpers tab
-
-Go to **Settings → Devices & Services → Helpers tab**, find the helper by name and click to edit.
-
-### Settings
-
-| Helper | Default | Purpose |
-|---|---|---|
-| `sems_inverter_capacity_w` | 10000W | Inverter rated output in watts |
-| `sems_load_threshold_watts` | 500W | Min change in watts before API call (lower = more responsive) |
-| `battery_max_charge_rate_w` | 3000W | Battery max charge rate — sets curtailment floor |
-| `battery_capacity_kwh` | 10 kWh | Battery capacity for time-to-full estimate |
-| `sems_curtailment_start` | 10:00 | Start of curtailment monitoring window |
-| `sems_curtailment_end` | 17:00 | End of curtailment monitoring window |
-
----
-
 ## Dashboard Card
 
 Add this as a **Markdown card** to any HA dashboard to see live power flow, Amber prices, curtailment status and all automation states at a glance.
 
-**Steps:**
-1. Edit your dashboard → **Add Card** → **Markdown**
-2. Paste the template below into the Content field
-3. Save
-
-**Icon legend:** 🟢 enabled & active · 🔴 enabled, waiting for conditions · 🚫 disabled
+**Icon legend:** 🟢 enabled & active · 🔴 enabled, waiting for conditions · 🚫 disabled · ⚠️ blocked
 
 ```jinja
 {# --- Power sensors (entity IDs configured via input_text helpers) --- #}
@@ -300,27 +272,24 @@ Add this as a **Markdown card** to any HA dashboard to see live power flow, Ambe
 {% set ss_block_end    = states('input_datetime.amber_block_smart_shift_end')           [0:5] %}
 {% set sems_start      = states('input_datetime.sems_curtailment_start')                [0:5] %}
 {% set sems_end        = states('input_datetime.sems_curtailment_end')                  [0:5] %}
-{# --- Automation enable flags (input_boolean, default OFF, survives restarts) --- #}
-{% set en_power_limit   = is_state('input_boolean.sems_enable_power_limit',             'on') %}
-{% set en_load_tracking = is_state('input_boolean.sems_enable_load_tracking',           'on') %}
-{% set en_force_export  = is_state('input_boolean.amber_enable_force_export_custom_fit','on') %}
-{% set en_block_ss      = is_state('input_boolean.amber_enable_block_smart_shift',      'on') %}
-{% set en_neg_notify    = is_state('input_boolean.amber_enable_negative_price_notify',  'on') %}
 {% set en_force_charge     = is_state('input_boolean.amber_enable_force_charge_custom_rate', 'on') %}
 {% set force_charge_active = is_state('input_boolean.amber_force_charge_active',           'on') %}
 {% set fc_start        = states('input_datetime.amber_force_charge_start')[0:5] %}
 {% set fc_end          = states('input_datetime.amber_force_charge_end')[0:5] %}
 {% set max_buy_price   = states('input_number.amber_max_buy_price_to_charge') | float(0.05) %}
 {% set max_soc_charge  = states('input_number.amber_max_soc_to_charge') | float(100) %}
-{# --- Automation session state flags (set/cleared by automations themselves) --- #}
+{# --- Automation enable flags --- #}
+{% set en_power_limit   = is_state('input_boolean.sems_enable_power_limit',             'on') %}
+{% set en_load_tracking = is_state('input_boolean.sems_enable_load_tracking',           'on') %}
+{% set en_force_export  = is_state('input_boolean.amber_enable_force_export_custom_fit','on') %}
+{% set en_block_ss      = is_state('input_boolean.amber_enable_block_smart_shift',      'on') %}
+{% set en_neg_notify    = is_state('input_boolean.amber_enable_negative_price_notify',  'on') %}
+{# --- Automation session state flags --- #}
 {% set curtailment_active  = is_state('input_boolean.sems_curtailment_active',        'on') %}
 {% set force_export_active = is_state('input_boolean.amber_force_export_active',      'on') %}
 {% set ss_blocked          = is_state('input_boolean.amber_block_smart_shift_active', 'on') %}
 {% set battery_offline     = is_state('input_boolean.amber_battery_offline',          'on') %}
 {# --- Derived display values --- #}
-{% set curtail_reason = 'Buy price negative — solar off, charging from grid' if buy_price < 0
-   else ('Battery full — load only (' ~ load_w | round(0) | int ~ 'W)') if soc >= 100
-   else ('Load ' ~ load_w | round(0) | int ~ 'W + Battery ' ~ battery_charge_w | round(0) | int ~ 'W = ' ~ target_pct ~ '%') %}
 {% set solar_disp  = (solar_w / 1000) | round(2) ~ ' kW'   if solar_w  >= 1000 else solar_w  | round(0) | int ~ ' W' %}
 {% set load_disp   = (load_w  / 1000) | round(2) ~ ' kW'   if load_w   >= 1000 else load_w   | round(0) | int ~ ' W' %}
 {% set grid_abs    = grid_w | abs %}
@@ -335,17 +304,15 @@ Add this as a **Markdown card** to any HA dashboard to see live power flow, Ambe
 {% set ttf_m         = ((hours_to_full - ttf_h) * 60) | int %}
 {% set ttf_finish    = (now().timestamp() + hours_to_full * 3600) | timestamp_custom('%I:%M %p') %}
 {% set ttf_str       = 'Full in ' ~ ttf_h ~ 'h ' ~ ttf_m ~ 'm — approx ' ~ ttf_finish %}
-{# --- Battery state line: pre-computed to avoid Jinja block newline issues --- #}
-{# charging = battery_w < 0, discharging = battery_w > 0, idle = 0 --- #}
 {% set bat_state = '← Charging ' ~ bat_disp ~ ' - ' ~ soc | round(0) | int ~ '%
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' ~ ttf_str if battery_w < 0
   else '- Discharging ' ~ bat_disp ~ ' - ' ~ soc | round(0) | int ~ '%' if battery_w > 0
   else '- Idle · ' ~ soc | round(0) | int ~ '%' %}
-{# --- Automation icon logic (🚫 disabled  🔴 enabled/waiting  🟢 enabled/active) --- #}
+{# --- Automation icon logic --- #}
 {% set ic_power_limit   = '🚫' if not en_power_limit   else ('🟢' if curtailment_active  else '🔴') %}
 {% set ic_load_tracking = '🚫' if (not en_load_tracking or not en_power_limit) else ('🟢' if curtailment_active else '🔴') %}
-{% set ic_force_export  = '🚫' if not en_force_export  else ('🟢' if force_export_active else '🔴') %}
-{% set ic_block_ss      = '🚫' if not en_block_ss      else ('🟢' if ss_blocked          else '🔴') %}
+{% set ic_force_export  = '⚠️' if (battery_offline and en_force_export) else ('🚫' if not en_force_export else ('🟢' if force_export_active else '🔴')) %}
+{% set ic_block_ss      = '⚠️' if (battery_offline and en_block_ss)     else ('🚫' if not en_block_ss     else ('🟢' if ss_blocked          else '🔴')) %}
 {% set ic_neg_notify    = '🚫' if not en_neg_notify    else '🟢' %}
 {% set ic_force_charge  = '⚠️' if (battery_offline and en_force_charge) else ('🚫' if not en_force_charge else ('🟢' if force_charge_active else '🔴')) %}
 
@@ -383,25 +350,9 @@ python3 /config/scripts/sems_power.py 0     # Set to 0% (effectively off)
 
 ---
 
-## Internal State Helpers
+## Architecture
 
-The integration uses several helpers as internal state flags — they are set and cleared automatically by automations and should not be toggled manually.
-
-| Helper | Purpose |
-|---|---|
-| `sems_curtailment_active` | Set when price curtailment is active |
-| `sems_current_power_limit` | Tracks the last inverter power limit set (%) |
-
-### Hiding them from the UI
-
-The install script hides these automatically using the HA entity registry API. If for any reason they are still visible, you can hide them manually:
-
-1. Go to **Settings → Devices & Services → Entities**
-2. Search for the helper name (e.g. `sems_curtailment_active`)
-3. Click the entity → click the **⚙️ cog icon**
-4. Toggle **Hidden** to on → **Update**
-
-Hidden helpers still function normally — automations can still read and write them. They just won't appear in Settings → Devices & Services → Helpers tab or on dashboards.
+📐 [Click here to view the Architecture Diagram](images/architecture.png)
 
 ---
 
