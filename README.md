@@ -136,6 +136,8 @@ Set each `Sensor -` helper to the entity ID from your battery integration:
 
 ![Dashboard Card](images/dashboard_card.png)
 
+**Icon legend:** 🟢 enabled & active · 🔴 enabled, waiting for conditions · 🚫 disabled · ⚠️ blocked
+
 Add the dashboard card now so you have a live visual of power flow, Amber prices and automation states straight away.
 
 1. Go to **Overview** in the HA sidebar
@@ -247,8 +249,6 @@ Add the dashboard card now so you have a live visual of power flow, Amber prices
 ```
 7. Click **Save**
 
-**Icon legend:** 🟢 enabled & active · 🔴 enabled, waiting for conditions · 🚫 disabled · ⚠️ blocked
-
 Once added the card shows live solar, battery, load and grid readings, Amber prices, curtailment status and all automation states at a glance.
 
 #### Optional — Add Entity Controls to the Dashboard
@@ -271,11 +271,6 @@ For each group below, add an **Entities** card and include the listed entities.
 
 **SEMS Load Tracking Adjustments** — real-time inverter adjustment as house load changes during curtailment
 - `Enable Automation: SEMS Load Tracking Adjustments`
-
----
-
-
----
 
 ---
 
