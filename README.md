@@ -221,10 +221,10 @@ Set each `Sensor -` helper to the entity ID from your battery integration:
 {# --- Automation icon logic --- #}
 {% set ic_power_limit   = '🚫' if not en_power_limit   else ('🟢' if curtailment_active  else '🔴') %}
 {% set ic_load_tracking = '🚫' if (not en_load_tracking or not en_power_limit) else ('🟢' if curtailment_active else '🔴') %}
-{% set ic_force_export  = '⚠️' if (battery_offline and en_force_export) else ('🚫' if not en_force_export else ('🟢' if force_export_active else '🔴')) %}
-{% set ic_block_ss      = '⚠️' if (battery_offline and en_block_ss)     else ('🚫' if not en_block_ss     else ('🟢' if ss_blocked          else '🔴')) %}
+{% set ic_force_export  = '🚫' if not en_force_export else ('🟢' if force_export_active else '🔴') %}
+{% set ic_block_ss      = '🚫' if not en_block_ss else ('🟢' if ss_blocked else '🔴') %}
 {% set ic_neg_notify    = '🚫' if not en_neg_notify    else '🟢' %}
-{% set ic_force_charge  = '⚠️' if (battery_offline and en_force_charge) else ('🚫' if not en_force_charge else ('🟢' if force_charge_active else '🔴')) %}
+{% set ic_force_charge  = '🚫' if not en_force_charge else ('🟢' if force_charge_active else '🔴') %}
 
 **💲 Amber**
 &nbsp;&nbsp;Buy **{{ (buy_price * 100) | round(0) | int }}c** &nbsp;&nbsp; Sell **{{ sell_display }}c** &nbsp;&nbsp; Amber SOC **{{ '⚠️' if battery_offline else (amber_soc | round(0) | int ~ '%') }}**
