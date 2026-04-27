@@ -169,68 +169,6 @@ For each group below, add an **Entities** card and include the listed entities.
 **SEMS Load Tracking Adjustments** — real-time inverter adjustment as house load changes during curtailment
 - `Enable Automation: SEMS Load Tracking Adjustments`
 
----
-
-**Force Export** — discharges battery to grid when sell price is at or above your threshold
-- `Enable Automation: Force Export`
-- `Amber Min Sell Price`
-- `Amber Min SOC to Sell`
-- `Amber Force Sell Start`
-- `Amber Force Sell End`
-
----
-
-**Force Charge** — charges battery from grid when buy price is at or below your threshold; switches to preserve mode at max SOC
-- `Enable Automation: Force Charge`
-- `Amber Max Buy Price`
-- `Amber Max SOC to Charge`
-- `Amber Force Charge Start`
-- `Amber Force Charge End`
-
----
-
-**Block Smart Shift** — disables Smart Shift overnight to preserve battery charge for peak periods
-- `Enable Automation: Block Smart Shift`
-- `Amber Block Smart Shift Start`
-- `Amber Block Smart Shift End`
-
----
-
-**Notifications**
-- `Enable Automation: Force Export Notifications`
-- `Enable Automation: Negative Price Notify`
-
----
-
-### Step 6 — Test the Script
-
-Optional — run these commands in **Terminal & SSH** to verify your credentials and inverter connection are working.
-
-```bash
-python3 /config/scripts/sems_power.py 100
-```
-
-Expected output:
-```
-Loading credentials from /config/secrets.yaml...
-Credentials loaded. Inverter SN: YOUR_SN
-Result: {"code": 0, "msg": "Success", ...}
-```
-
-Test curtailment:
-```bash
-python3 /config/scripts/sems_power.py 50
-```
-
-Verify in the **SEMS+ app**: tap your inverter → **Configure** → **Active Power (%)** should show 50.
-
-Restore to full output:
-```bash
-python3 /config/scripts/sems_power.py 100
-```
-
----
-
 ## Dashboard Card
 
 Add this as a **Markdown card** to any HA dashboard to see live power flow, Amber prices, curtailment status and all automation states at a glance.
@@ -336,6 +274,37 @@ Add this as a **Markdown card** to any HA dashboard to see live power flow, Ambe
 &nbsp;&nbsp;{{ ic_force_charge }} **Charge** <= {{ (max_buy_price * 100) | round(0) | int }}c · Max SOC {{ max_soc_charge | int }}% · {{ fc_start }}–{{ fc_end }}
 &nbsp;&nbsp;{{ ic_block_ss }} **Block Smart Shift** - {{ ss_block_start }}–{{ ss_block_end }}{{ ' · Active' if ss_blocked else '' }}
 &nbsp;&nbsp;{{ ic_neg_notify }} **Negative Price Notify**
+```
+
+---
+
+---
+
+### Step 6 — Test the Script
+
+Optional — run these commands in **Terminal & SSH** to verify your credentials and inverter connection are working.
+
+```bash
+python3 /config/scripts/sems_power.py 100
+```
+
+Expected output:
+```
+Loading credentials from /config/secrets.yaml...
+Credentials loaded. Inverter SN: YOUR_SN
+Result: {"code": 0, "msg": "Success", ...}
+```
+
+Test curtailment:
+```bash
+python3 /config/scripts/sems_power.py 50
+```
+
+Verify in the **SEMS+ app**: tap your inverter → **Configure** → **Active Power (%)** should show 50.
+
+Restore to full output:
+```bash
+python3 /config/scripts/sems_power.py 100
 ```
 
 ---
