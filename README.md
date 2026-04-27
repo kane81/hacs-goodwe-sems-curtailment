@@ -138,7 +138,7 @@ Set each `Sensor -` helper to the entity ID from your battery integration:
 
 **Icon legend:** 🟢 enabled & active · 🔴 enabled, waiting for conditions · 🚫 disabled · ⚠️ blocked
 
-Add the dashboard card now so you have a live visual of power flow, Amber prices and automation states straight away.
+### Adding the card
 
 1. Go to **Overview** in the HA sidebar
 2. Click the **⋮** menu (top right) → **Edit dashboard**
