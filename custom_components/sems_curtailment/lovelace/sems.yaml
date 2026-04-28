@@ -1,12 +1,14 @@
-title: Solar
+title: SEMS
 views:
   - type: sections
-    title: Solar
+    title: SEMS
     path: solar
     icon: mdi:solar-power
+    max_columns: 2
     sections:
 
       - type: grid
+        title: Status
         cards:
           - type: markdown
             content: |
@@ -110,40 +112,21 @@ views:
               &nbsp;&nbsp;{{ ic_neg_notify }} **Negative Price Notify**
 
           - type: tile
-            entity: input_boolean.amber_enable_force_export_custom_fit
-            grid_options:
-              columns: full
-          - type: tile
-            entity: input_number.amber_min_sell_price
-          - type: tile
-            entity: input_number.amber_min_soc_to_sell
-          - type: tile
-            entity: input_datetime.amber_force_sell_on_custom_fit_start
-          - type: tile
-            entity: input_datetime.amber_force_sell_on_custom_fit_end
-
-          - type: tile
-            entity: input_boolean.amber_enable_force_charge_custom_rate
-            grid_options:
-              columns: full
-          - type: tile
-            entity: input_number.amber_max_buy_price_to_charge
-          - type: tile
-            entity: input_number.amber_max_soc_to_charge
-          - type: tile
-            entity: input_datetime.amber_force_charge_start
-          - type: tile
-            entity: input_datetime.amber_force_charge_end
-
-          - type: tile
             entity: input_boolean.amber_enable_block_smart_shift
             grid_options:
               columns: full
           - type: tile
             entity: input_datetime.amber_block_smart_shift_start
+            grid_options:
+              columns: full
           - type: tile
             entity: input_datetime.amber_block_smart_shift_end
+            grid_options:
+              columns: full
 
+      - type: grid
+        title: Controls
+        cards:
           - type: tile
             entity: input_boolean.sems_enable_power_limit
             grid_options:
@@ -161,6 +144,32 @@ views:
             entity: input_number.sems_load_threshold_watts
             grid_options:
               columns: full
+
+          - type: tile
+            entity: input_boolean.amber_enable_force_export_custom_fit
+            grid_options:
+              columns: full
+          - type: tile
+            entity: input_datetime.amber_force_sell_on_custom_fit_start
+          - type: tile
+            entity: input_datetime.amber_force_sell_on_custom_fit_end
+          - type: tile
+            entity: input_number.amber_min_sell_price
+          - type: tile
+            entity: input_number.amber_min_soc_to_sell
+
+          - type: tile
+            entity: input_boolean.amber_enable_force_charge_custom_rate
+            grid_options:
+              columns: full
+          - type: tile
+            entity: input_datetime.amber_force_charge_start
+          - type: tile
+            entity: input_datetime.amber_force_charge_end
+          - type: tile
+            entity: input_number.amber_max_buy_price_to_charge
+          - type: tile
+            entity: input_number.amber_max_soc_to_charge
 
           - type: tile
             entity: input_boolean.amber_enable_negative_price_notify

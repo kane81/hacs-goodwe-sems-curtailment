@@ -18,6 +18,29 @@
 
 ---
 
+## ⚠️ Prerequisites
+
+- **[hacs-custom-amber-integration](https://github.com/kane81/hacs-custom-amber-integration) installed and working** — prices must be updating before you install this
+- **GoodWe inverter** connected to the SEMS Portal
+- **Home Assistant OS or Supervised** with HACS installed
+
+### Have on hand before starting
+
+| What | Notes |
+|---|---|
+| **Battery SOC sensor entity ID** | Find in Developer Tools → States. Example: `sensor.al7011025073833_instantaneous_battery_soc` |
+| **Battery I/O Power sensor entity ID** | Negative = charging. Example: `sensor.al7011025073833_instantaneous_battery_i_o` |
+| **House Load sensor entity ID** | Example: `sensor.al7011025073833_instantaneous_load` |
+| **Solar Production sensor entity ID** | Example: `sensor.al7011025073833_instantaneous_generation` |
+| **Grid Power sensor entity ID** | Example: `sensor.al7011025073833_instantaneous_grid_i_o_total` |
+| **Inverter rated capacity** | In watts — e.g. GW10K-MS = 10000W |
+| **Battery max charge rate** | In watts — e.g. AlphaESS Smile5 = 4640W |
+| **Battery usable capacity** | In kWh — check your battery spec sheet |
+
+The install script will prompt you to enter all of these — just copy and paste.
+
+---
+
 ## ⚠️ Disclaimer
 
 This project uses the SEMS Portal API which is not publicly documented or officially supported. GoodWe may change or remove it at any time without notice. This project has no affiliation with GoodWe or SEMS. Use at your own risk — changing inverter output limits directly affects your solar system. The author accepts no responsibility for energy costs, equipment damage or system issues.
@@ -67,7 +90,7 @@ The script will:
 - Check that hacs-custom-amber-integration is installed
 - Tell you exactly what to fix if anything is missing
 
-After restarting HA, a **Solar** dashboard will appear in your sidebar ready to use.
+After restarting HA, a **SEMS** dashboard will appear in your sidebar ready to use.
 
 **Verify it completed successfully** — the output should end with:
 ```
