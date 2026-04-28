@@ -54,7 +54,7 @@ This integration will not function without Amber Electric prices being available
 
 HACS downloads the integration into `/config/custom_components/sems_curtailment/`.
 
-**This is a one-time step.** Open **Terminal & SSH** and run the install script:
+**This is a one-time step.** Open **Advanced SSH & Web Terminal** and run the install script:
 
 ```bash
 bash /config/custom_components/sems_curtailment/install.sh
@@ -62,9 +62,12 @@ bash /config/custom_components/sems_curtailment/install.sh
 
 The script will:
 - Copy all automations, scripts, packages and templates to `/config/`
-- Check your `configuration.yaml` for any missing lines
+- Automatically update `configuration.yaml` with required automation and package entries
+- Create `lovelace/sems.yaml` with the dashboard card pre-configured and add the lovelace dashboard entry to `configuration.yaml`
 - Check that hacs-custom-amber-integration is installed
 - Tell you exactly what to fix if anything is missing
+
+After restarting HA, a **Solar** dashboard will appear in your sidebar ready to use.
 
 **Verify it completed successfully** — the output should end with:
 ```
@@ -77,25 +80,18 @@ The script will:
 
 ### Step 3 — Add SEMS Credentials
 
-#### Step 3a — Get your SEMS credentials
+The install script will prompt you for your credentials when it runs — no manual file editing needed.
 
-You will need the email and password you use to log into [au.semsportal.com](https://au.semsportal.com) and your inverter serial number.
+You will be asked for:
+- **SEMS Portal email** — the email you use to log into [au.semsportal.com](https://au.semsportal.com)
+- **SEMS Portal password** — your SEMS Portal password
+- **Inverter serial number** — printed on the label on your physical inverter, or visible in **SEMS+ app → Device → Device Info**
+- **HA Long-Lived Access Token** — get this from your HA profile:
+  1. Click your **profile avatar** (bottom left of the HA sidebar)
+  2. Scroll down to **Long-Lived Access Tokens** → **Create Token**
+  3. **Copy it immediately** — it will not be shown again
 
-**Finding your inverter serial number:**
-- Printed on the label on your physical inverter
-- Also visible in **SEMS+ app → Device → Device Info**
-
-#### Step 3b — Add credentials to secrets.yaml
-
-Open **Studio Code Server** from the sidebar and open `/config/secrets.yaml`. Add:
-
-```yaml
-sems_email: "your-email-you-use-to-login-to-sems-portal"
-sems_password: "your-password-you-use-to-login-to-sems-portal"
-sems_inverter_sn: "YOUR_INVERTER_SERIAL"
-```
-
-Save with **Ctrl+S**.
+All values are saved directly to `/config/secrets.yaml`. If you skipped any prompts you can add them manually to that file later.
 
 ---
 
@@ -140,12 +136,18 @@ Set each `Sensor -` helper to the entity ID from your battery integration:
 
 ### Adding the card
 
+The install script automatically adds the dashboard card to your Overview dashboard — just answer **Y** when prompted during install.
+
+If you prefer to add it manually or want to add it to a different dashboard:
+
 1. Go to **Overview** in the HA sidebar
 2. Click the **⋮** menu (top right) → **Edit dashboard**
-3. If you want a dedicated dashboard: click **⋮** → **Manage dashboards** → **Add dashboard** → **New dashboard from scratch** → give it a name → **Create** → open it from the sidebar and click **Edit**
-4. Click **+ Add Card**
-5. Search for and select **Markdown**
-6. Paste the full card template below into the Content field
+3. To create a dedicated dashboard: click **⋮** → **Manage dashboards** → **Add dashboard** → **New dashboard from scratch** → give it a name → **Create** → open it from the sidebar and click **Edit**
+4. Click **+ Add Card** → search for and select **Markdown**
+5. Copy the card template from [`custom_components/sems_curtailment/dashboard_card.txt`](custom_components/sems_curtailment/dashboard_card.txt) and paste into the Content field
+6. Click **Save**
+
+The full template is also shown below for reference:
 
 ```jinja
 {# --- Power sensors (entity IDs configured via input_text helpers) --- #}
@@ -276,7 +278,7 @@ For each group below, add an **Entities** card and include the listed entities.
 
 ### Step 6 — Test the Script
 
-Optional — run these commands in **Terminal & SSH** to verify your credentials and inverter connection are working.
+Optional — run these commands in **Advanced SSH & Web Terminal** to verify your credentials and inverter connection are working.
 
 ```bash
 python3 /config/scripts/sems_power.py 100
@@ -316,6 +318,16 @@ python3 /config/scripts/sems_power.py 0     # Set to 0% (effectively off)
 📐 [Click here to view the Architecture Diagram](images/architecture.png)
 
 ---
+
+## Uninstalling
+
+Removing this integration via HACS only deletes the `custom_components` folder — automation files, packages, scripts and helpers are left behind. To fully remove everything run the uninstall script first:
+
+```bash
+bash /config/custom_components/sems_curtailment/uninstall.sh
+```
+
+Then remove from HACS and restart HA.
 
 ## Troubleshooting
 

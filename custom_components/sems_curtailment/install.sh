@@ -3,21 +3,16 @@
 # Home Assistant GoodWe SEMS Curtailment - Install Script
 # =============================================================================
 #
-# Run this after every HACS install or update to copy integration files
-# into their correct /config/ locations.
-#
 # Usage:
 #   bash /config/custom_components/sems_curtailment/install.sh
 #
-# Safe to re-run — existing files are overwritten, nothing is deleted.
-# User-configured helper values are never overwritten on update.
+# Mode: "full" (default) runs full install.
+#       "sync" just copies files — used on HA startup.
 # =============================================================================
 
 set -e
 
-# Mode: "full" (default) runs full install. "sync" just copies files.
 MODE=${1:-full}
-
 SRC=/config/custom_components/sems_curtailment
 CONFIG=/config/configuration.yaml
 ERRORS=0
@@ -28,31 +23,35 @@ echo " Install Script"
 echo "============================================="
 echo ""
 
-# Automations
+if [ "$MODE" = "sync" ]; then
+    echo "⚡ Sync mode — skipping full install steps"
+    echo ""
+fi
+
+# -----------------------------------------------------------------------------
+# Copy files
+# -----------------------------------------------------------------------------
 echo "📋 Copying automations..."
 mkdir -p /config/automations
 cp -v $SRC/automations/*.yaml /config/automations/
 
-# Scripts
 echo ""
 echo "🐍 Copying scripts..."
 mkdir -p /config/scripts
 cp -v $SRC/scripts/*.py /config/scripts/
 
-# Package
 echo ""
 echo "📦 Copying package..."
 mkdir -p /config/packages
 cp -v $SRC/packages/sems.yaml /config/packages/
 
-# Templates
 echo ""
 echo "📄 Copying templates..."
 mkdir -p /config/templates
 cp -v $SRC/templates/*.yaml /config/templates/
 
 # -----------------------------------------------------------------------------
-# Load HA credentials — needed for all API calls below
+# Load credentials
 # -----------------------------------------------------------------------------
 SECRETS=/config/secrets.yaml
 HA_URL=$(grep "^ha_url:" $SECRETS 2>/dev/null | sed 's/ha_url: *//' | tr -d '"' || echo "http://localhost:8123")
@@ -68,7 +67,15 @@ fi
 # Helper functions
 # -----------------------------------------------------------------------------
 
-# Get current state of an entity — returns empty string if unavailable
+ha_post() {
+    local endpoint=$1 data=$2
+    curl -s -o /dev/null -w "%{http_code}" -X POST \
+        "$HA_URL/api/$endpoint" \
+        -H "Authorization: Bearer $HA_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "$data"
+}
+
 get_state() {
     local entity_id=$1
     [ -z "$HA_TOKEN" ] && echo "" && return
@@ -78,113 +85,99 @@ get_state() {
         python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('state',''))" 2>/dev/null || echo ""
 }
 
-# Set an input_number — only if current state is unavailable or matches default
+number_needs_default() {
+    local entity_id=$1 min_value=$2
+    [ -z "$HA_TOKEN" ] && echo "yes" && return
+    current=$(get_state "$entity_id")
+    if [ -z "$current" ] || [ "$current" = "unavailable" ] || [ "$current" = "unknown" ] || \
+       python3 -c "exit(0 if abs(float('${current:-0}') - float('$min_value')) < 0.0001 else 1)" 2>/dev/null; then
+        echo "yes"
+    else
+        echo "no"
+    fi
+}
+
 set_number_if_default() {
-    local entity_id=$1
-    local default_value=$2
-    local description=$3
+    local entity_id=$1 default_value=$2 description=$3 min_value=${4:-0}
     [ -z "$HA_TOKEN" ] && echo "   - $entity_id (skipped — no token)" && return
-
-    current=$(get_state "$entity_id")
-    if [ -z "$current" ] || [ "$current" = "unavailable" ] || [ "$current" = "unknown" ]; then
-        # Entity has no stored state — first install, set default
-        curl -s -o /dev/null -X POST \
-            "$HA_URL/api/services/input_number/set_value" \
-            -H "Authorization: Bearer $HA_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"entity_id\": \"$entity_id\", \"value\": $default_value}"
-        echo "   ✅ $description set to $default_value (first install default)"
+    if [ "$(number_needs_default "$entity_id" "$min_value")" = "yes" ]; then
+        ha_post "services/input_number/set_value" "{\"entity_id\": \"$entity_id\", \"value\": $default_value}" > /dev/null
+        echo "   ✅ $description set to $default_value"
     else
+        current=$(get_state "$entity_id")
         echo "   ⏭️  $description already set to $current — keeping user value"
     fi
 }
 
-# Set an input_datetime — only if no stored state
 set_datetime_if_default() {
-    local entity_id=$1
-    local default_value=$2
-    local description=$3
+    local entity_id=$1 default_value=$2 description=$3
     [ -z "$HA_TOKEN" ] && echo "   - $entity_id (skipped — no token)" && return
-
     current=$(get_state "$entity_id")
-    if [ -z "$current" ] || [ "$current" = "unavailable" ] || [ "$current" = "unknown" ]; then
-        curl -s -o /dev/null -X POST \
-            "$HA_URL/api/services/input_datetime/set_datetime" \
-            -H "Authorization: Bearer $HA_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"entity_id\": \"$entity_id\", \"time\": \"$default_value\"}"
-        echo "   ✅ $description set to $default_value (first install default)"
+    if [ -z "$current" ] || [ "$current" = "unavailable" ] || [ "$current" = "unknown" ] || \
+       [ "$current" = "00:00:00" ]; then
+        ha_post "services/input_datetime/set_datetime" "{\"entity_id\": \"$entity_id\", \"time\": \"$default_value\"}" > /dev/null
+        echo "   ✅ $description set to $default_value"
     else
         echo "   ⏭️  $description already set to $current — keeping user value"
     fi
 }
 
-# Set a boolean OFF — only on first install (no stored state)
-set_boolean_off_if_new() {
-    local entity_id=$1
+set_boolean_if_new() {
+    local entity_id=$1 state=$2
     [ -z "$HA_TOKEN" ] && echo "   - $entity_id (skipped — no token)" && return
-
     current=$(get_state "$entity_id")
     if [ -z "$current" ] || [ "$current" = "unavailable" ] || [ "$current" = "unknown" ]; then
-        curl -s -o /dev/null -X POST \
-            "$HA_URL/api/services/input_boolean/turn_off" \
-            -H "Authorization: Bearer $HA_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"entity_id\": \"$entity_id\"}"
-        echo "   ✅ OFF: $entity_id (first install default)"
+        ha_post "services/input_boolean/turn_${state}" "{\"entity_id\": \"$entity_id\"}" > /dev/null
+        echo "   ✅ ${state^^}: $entity_id (first install default)"
     else
         echo "   ⏭️  $entity_id already $current — keeping user value"
     fi
 }
 
-# Hide an entity in the HA UI
-hide_entity() {
-    local entity_id=$1
-    [ -z "$HA_TOKEN" ] && echo "   - $entity_id (skipped — no token)" && return
-    result=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH \
-        "$HA_URL/api/config/entity_registry/$entity_id" \
-        -H "Authorization: Bearer $HA_TOKEN" \
-        -H "Content-Type: application/json" \
-        -d '{"hidden_by": "user"}')
+reload_yaml() {
+    [ -z "$HA_TOKEN" ] && return
+    echo ""
+    echo "🔄 Reloading HA YAML configuration..."
+    result=$(ha_post "services/homeassistant/reload_all" "{}")
     if [ "$result" = "200" ]; then
-        echo "   ✅ Hidden: $entity_id"
+        echo "   ✅ YAML reloaded — waiting 15 seconds for helpers to initialise..."
+        sleep 15
     else
-        echo "   ⚠️  Could not hide $entity_id (HTTP $result)"
+        echo "   ⚠️  Could not reload YAML (HTTP $result)"
     fi
 }
 
 # -----------------------------------------------------------------------------
-# Set automation enable booleans to OFF (first install only)
+# Create Solar dashboard (optional)
 # -----------------------------------------------------------------------------
 echo ""
-echo "🔧 Setting automation enable booleans..."
-set_boolean_off_if_new "input_boolean.sems_enable_power_limit"
-set_boolean_off_if_new "input_boolean.sems_enable_load_tracking"
+echo "📊 Dashboard"
+DASHBOARD_DIR="/config/lovelace"
+DASHBOARD_FILE="$DASHBOARD_DIR/sems.yaml"
+LOVELACE_SRC="$SRC/lovelace/sems.yaml"
+
+mkdir -p "$DASHBOARD_DIR"
+
+if [ -f "$DASHBOARD_FILE" ]; then
+    echo "   ⏭️  Dashboard already exists — skipping"
+    echo "   (Delete $DASHBOARD_FILE and re-run to recreate)"
+else
+    read -r -p "   Create Solar dashboard in sidebar? (Y/n): " create_dash
+    if [[ ! "$create_dash" =~ ^[Nn]$ ]]; then
+        if [ -f "$LOVELACE_SRC" ]; then
+            cp "$LOVELACE_SRC" "$DASHBOARD_FILE"
+            echo "   ✅ Dashboard created: $DASHBOARD_FILE"
+        else
+            echo "   ⚠️  Dashboard template not found: $LOVELACE_SRC"
+        fi
+    else
+        echo "   Skipped — see Dashboard Card section in README to add manually later."
+    fi
+fi
 
 # -----------------------------------------------------------------------------
-# Set default values for configurable helpers (first install / full mode only)
-# Skipped on startup sync to avoid overwriting user values during HA boot
+# Update configuration.yaml
 # -----------------------------------------------------------------------------
-if [ "$MODE" = "full" ]; then
-echo ""
-echo "🔧 Setting default values for configurable helpers..."
-set_number_if_default   "input_number.sems_inverter_capacity_w"  10000  "SEMS Inverter Capacity"
-set_number_if_default   "input_number.sems_load_threshold_watts" 500    "SEMS Load Threshold"
-set_number_if_default   "input_number.battery_capacity_kwh"      10     "Battery Capacity"
-set_number_if_default   "input_number.battery_max_charge_rate_w" 3000   "Battery Max Charge Rate"
-set_datetime_if_default "input_datetime.sems_curtailment_start"  "10:00:00" "Curtailment Start"
-set_datetime_if_default "input_datetime.sems_curtailment_end"    "17:00:00" "Curtailment End"
-
-fi  # end MODE=full
-
-# -----------------------------------------------------------------------------
-# Hide internal state flag helpers from the HA UI
-# -----------------------------------------------------------------------------
-echo ""
-echo "🙈 Hiding internal state flag helpers..."
-hide_entity "input_boolean.sems_curtailment_active"
-hide_entity "input_number.sems_current_power_limit"
-
 echo ""
 echo "============================================="
 echo " Checking configuration.yaml"
@@ -193,64 +186,103 @@ echo ""
 
 if grep -q "include_dir_merge_list automations" $CONFIG; then
     echo "✅ automation: !include_dir_merge_list automations/ — found"
+elif grep -q "automation: !include automations.yaml" $CONFIG; then
+    sed -i "s|automation: !include automations.yaml|automation: !include_dir_merge_list automations/|g" $CONFIG
+    echo "✅ automation: updated to !include_dir_merge_list automations/"
 else
-    echo "⚠️  MISSING — automation directory not configured!"
-    echo ""
-    echo "   Add this line to $CONFIG:"
-    echo "   automation: !include_dir_merge_list automations/"
-    echo ""
-    echo "   If you already have 'automation: !include automations.yaml'"
-    echo "   replace that line with the one above."
-    ERRORS=$((ERRORS + 1))
+    echo "" >> $CONFIG
+    echo "automation: !include_dir_merge_list automations/" >> $CONFIG
+    echo "✅ automation: !include_dir_merge_list automations/ — added"
 fi
 
 if grep -q "include_dir_named packages" $CONFIG; then
     echo "✅ packages: !include_dir_named packages/ — found"
+elif grep -q "^homeassistant:" $CONFIG; then
+    sed -i "/^homeassistant:/a\\  packages: !include_dir_named packages/" $CONFIG
+    echo "✅ packages: !include_dir_named packages/ — added"
 else
-    echo "⚠️  MISSING — packages directory not configured!"
-    echo ""
-    echo "   Add these lines to $CONFIG under homeassistant::"
-    echo "   homeassistant:"
-    echo "     packages: !include_dir_named packages/"
-    ERRORS=$((ERRORS + 1))
+    echo "" >> $CONFIG
+    echo "homeassistant:" >> $CONFIG
+    echo "  packages: !include_dir_named packages/" >> $CONFIG
+    echo "✅ homeassistant: packages: — added"
 fi
 
-echo ""
-echo "============================================="
-echo " Checking Amber dependency"
-echo "============================================="
-echo ""
+if grep -q "lovelace-solar" $CONFIG; then
+    echo "✅ lovelace dashboard entry — found"
+elif [ -f "$DASHBOARD_FILE" ]; then
+    if grep -q "^lovelace:" $CONFIG; then
+        sed -i "/^lovelace:/a\\  dashboards:\n    lovelace-solar:\n      mode: yaml\n      title: Solar\n      icon: mdi:solar-power\n      filename: lovelace/sems.yaml\n      show_in_sidebar: true" $CONFIG
+    else
+        echo "" >> $CONFIG
+        echo "lovelace:" >> $CONFIG
+        echo "  dashboards:" >> $CONFIG
+        echo "    lovelace-solar:" >> $CONFIG
+        echo "      mode: yaml" >> $CONFIG
+        echo "      title: Solar" >> $CONFIG
+        echo "      icon: mdi:solar-power" >> $CONFIG
+        echo "      filename: lovelace/sems.yaml" >> $CONFIG
+        echo "      show_in_sidebar: true" >> $CONFIG
+    fi
+    echo "✅ lovelace dashboard entry — added"
+fi
 
 if [ -f "/config/packages/amber.yaml" ]; then
     echo "✅ hacs-custom-amber-integration package found"
 else
     echo "⚠️  hacs-custom-amber-integration NOT found!"
-    echo ""
-    echo "   This integration requires hacs-custom-amber-integration."
-    echo "   Install it first from HACS:"
-    echo "   https://github.com/kane81/hacs-custom-amber-integration"
+    echo "   Install it first: https://github.com/kane81/hacs-custom-amber-integration"
     ERRORS=$((ERRORS + 1))
+fi
+
+# -----------------------------------------------------------------------------
+# Reload YAML then set defaults (full mode only)
+# -----------------------------------------------------------------------------
+if [ "$MODE" = "full" ]; then
+    reload_yaml
+
+    echo ""
+    echo "🔧 Setting automation enable booleans..."
+    set_boolean_if_new "input_boolean.sems_enable_power_limit"   "off"
+    set_boolean_if_new "input_boolean.sems_enable_load_tracking" "off"
+
+    echo ""
+    echo "🔧 Setting default values for configurable helpers..."
+    set_number_if_default   "input_number.sems_inverter_capacity_w"   10000     "SEMS Inverter Capacity"    0
+    set_number_if_default   "input_number.sems_load_threshold_watts"  500       "SEMS Load Threshold"       0
+    set_number_if_default   "input_number.battery_capacity_kwh"       10        "Battery Capacity"          0
+    set_number_if_default   "input_number.battery_max_charge_rate_w"  3000      "Battery Max Charge Rate"   0
+    set_datetime_if_default "input_datetime.sems_curtailment_start"   "09:00:00" "Curtailment Start"
+    set_datetime_if_default "input_datetime.sems_curtailment_end"     "17:00:00" "Curtailment End"
+
+    reload_yaml
 fi
 
 echo ""
 echo "============================================="
-
 if [ $ERRORS -eq 0 ]; then
     echo " ✅ Install complete!"
-    echo ""
-    echo " Next steps:"
-    echo "  1. Add your SEMS credentials to /config/secrets.yaml"
-    echo "  2. Reload: Developer Tools → YAML → Reload All"
-    echo "     Or restart: Settings → System → Restart"
-    echo "  3. Configure sensor helpers via Overview → Devices → Helpers"
-    echo "  4. Test: python3 /config/scripts/sems_power.py 100"
-    echo ""
-    echo " ⚡ Future HACS updates will run this script automatically"
-    echo "    via the sems_hacs_auto_install automation."
 else
     echo " ⚠️  Install complete with $ERRORS warning(s) above."
-    echo ""
-    echo " Fix the issues listed above before proceeding."
 fi
-
+echo ""
+echo " ⚡ Future HACS updates will run this script automatically"
+echo "    via the sems_hacs_auto_install automation."
 echo "============================================="
+echo ""
+
+if [ "$MODE" = "full" ]; then
+    read -r -p "🔄 Restart Home Assistant now to apply all changes? (Y/n): " do_restart
+    if [[ ! "$do_restart" =~ ^[Nn]$ ]]; then
+        echo ""
+        echo "   Restarting Home Assistant..."
+        curl -s -o /dev/null -X POST \
+            "$HA_URL/api/services/homeassistant/restart" \
+            -H "Authorization: Bearer $HA_TOKEN" \
+            -H "Content-Type: application/json"
+        echo "   ✅ Restart initiated — HA will be back in about 30 seconds."
+    else
+        echo ""
+        echo "   Remember to restart HA manually:"
+        echo "   Settings → System → Restart"
+    fi
+fi
