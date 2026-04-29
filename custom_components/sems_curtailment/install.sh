@@ -383,6 +383,37 @@ if [ "$MODE" = "full" ]; then
     prompt_sensor "input_text.sensor_grid"         "Grid Power sensor (negative=export)" \
         "sensor.al7011025073833_instantaneous_grid_i_o_total"
 
+    # Check if any sensors were configured and warn if not
+    SENSORS_SET=0
+    for s in input_text.sensor_battery_soc input_text.sensor_battery_io input_text.sensor_load input_text.sensor_solar input_text.sensor_grid; do
+        val=$(get_state "$s")
+        if [ -n "$val" ] && [ "$val" != "unavailable" ] && [ "$val" != "unknown" ]; then
+            SENSORS_SET=$((SENSORS_SET + 1))
+        fi
+    done
+
+    if [ "$SENSORS_SET" -eq 0 ]; then
+        echo ""
+        echo "   ⚠️  No sensors configured."
+        echo "   The install will still work but:"
+        echo "   - SEMS Load Tracking Adjustments will NOT function"
+        echo "   - Curtailment will read load as 0W, so curtailment will"
+        echo "     effectively set inverter output to 0% (near-zero export)"
+        echo "   - Note: setting output to 0% does not turn off the inverter —"
+        echo "     a small amount of power will still leak through. This is"
+        echo "     intentional as turning the inverter fully off takes several"
+        echo "     minutes to restart."
+        echo "   You can add sensors later via Overview → Devices → Helpers."
+    elif [ "$SENSORS_SET" -lt 5 ]; then
+        echo ""
+        echo "   ⚠️  Only $SENSORS_SET of 5 sensors configured."
+        echo "   SEMS Load Tracking Adjustments may not work correctly."
+        echo "   You can add missing sensors later via Overview → Devices → Helpers."
+    else
+        echo ""
+        echo "   ✅ All 5 sensors configured."
+    fi
+
     # ── Enable booleans ────────────────────────────────────────────────────
     echo ""
     echo "🔧 Setting automation enable booleans..."

@@ -68,7 +68,7 @@ This project uses the SEMS Portal API which is not publicly documented or offici
 
 **Sensor Entity IDs**
 
-These tell the integration which sensors to read from your battery integration. Find them in **Developer Tools → States**.
+These tell the integration which sensors to read from your battery. The integration can function without them but curtailment calculations will be less accurate. Find your sensor IDs in **Developer Tools → States**.
 
 | What | Notes |
 |---|---|
@@ -77,6 +77,13 @@ These tell the integration which sensors to read from your battery integration. 
 | **House Load sensor** | Current house consumption in watts. Example: `sensor.al7011025073833_instantaneous_load` |
 | **Solar Production sensor** | Current solar generation in watts. Example: `sensor.al7011025073833_instantaneous_generation` |
 | **Grid Power sensor** | Positive = importing, negative = exporting. Example: `sensor.al7011025073833_instantaneous_grid_i_o_total` |
+
+> The example sensor IDs above are from the **[homeassistant-alphaESS](https://github.com/CharlesGillanders/homeassistant-alphaESS)** integration by Charles Gillanders — a great community integration for AlphaESS batteries. Any battery integration that exposes these values as HA sensors will work.
+
+> **No battery sensors installed?** The integration will still work but:
+> - **SEMS Load Tracking Adjustments** will not function (requires a load sensor)
+> - **Curtailment** will read load as 0W, so when curtailment activates it will set the inverter output to near-zero — effectively preventing all export
+> - Setting output to 0% does **not** turn the inverter off — a small amount of power will still leak through. This is intentional, as a fully powered-off inverter takes several minutes to restart and reconnect
 
 The install script will prompt you to enter all of these — just copy and paste.
 
@@ -411,4 +418,5 @@ Issues and PRs welcome. Contributions should include testing against the current
 
 - **[hacs-custom-amber-integration](https://github.com/kane81/hacs-custom-amber-integration)** — the companion Amber Electric integration this project depends on
 - **[Official Amber Electric Integration](https://www.home-assistant.io/integrations/amberelectric/)**
+- **[homeassistant-alphaESS](https://github.com/CharlesGillanders/homeassistant-alphaESS)** by Charles Gillanders — AlphaESS battery integration used as sensor reference
 - Thanks to **hudakh**, **chrismalec87**, 6minchinbury, **Jacob Kairl** and the rest of the beta testers.
