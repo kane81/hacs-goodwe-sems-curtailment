@@ -271,22 +271,28 @@ if grep -q "lovelace-sems" $CONFIG; then
     echo "✅ lovelace dashboard entry — found"
 elif [ -f "$DASHBOARD_FILE" ]; then
     if grep -q "lovelace-amber" $CONFIG; then
-        # Amber already added lovelace: dashboards: — add SEMS entry under existing dashboards:
-        sed -i "/lovelace-amber:/a\    lovelace-sems:\n      mode: yaml\n      title: SEMS\n      icon: mdi:solar-power\n      filename: lovelace/sems.yaml\n      show_in_sidebar: true" $CONFIG
-        echo "✅ lovelace dashboard entry — added under existing Amber dashboards:"
-    elif grep -q "^lovelace:" $CONFIG; then
-        sed -i "/^lovelace:/a\  dashboards:\n    lovelace-sems:\n      mode: yaml\n      title: SEMS\n      icon: mdi:solar-power\n      filename: lovelace/sems.yaml\n      show_in_sidebar: true" $CONFIG
-        echo "✅ lovelace dashboard entry — added"
+        # Add under existing lovelace block
+        cat >> $CONFIG << 'LOVELACE'
+    lovelace-sems:
+      mode: yaml
+      title: SEMS
+      icon: mdi:solar-power
+      filename: lovelace/sems.yaml
+      show_in_sidebar: true
+LOVELACE
+        echo "✅ lovelace-sems dashboard entry — added under existing lovelace block"
     else
-        echo "" >> $CONFIG
-        echo "lovelace:" >> $CONFIG
-        echo "  dashboards:" >> $CONFIG
-        echo "    lovelace-sems:" >> $CONFIG
-        echo "      mode: yaml" >> $CONFIG
-        echo "      title: SEMS" >> $CONFIG
-        echo "      icon: mdi:solar-power" >> $CONFIG
-        echo "      filename: lovelace/sems.yaml" >> $CONFIG
-        echo "      show_in_sidebar: true" >> $CONFIG
+        cat >> $CONFIG << 'LOVELACE'
+
+lovelace:
+  dashboards:
+    lovelace-sems:
+      mode: yaml
+      title: SEMS
+      icon: mdi:solar-power
+      filename: lovelace/sems.yaml
+      show_in_sidebar: true
+LOVELACE
         echo "✅ lovelace dashboard entry — added"
     fi
 fi
@@ -347,14 +353,18 @@ if [ "$MODE" = "full" ]; then
         local example=$3
         current=$(get_state "$entity_id")
         if [ -n "$current" ] && [ "$current" != "unavailable" ] && [ "$current" != "unknown" ]; then
-            echo "   ⏭️  $label already set to '$current' — keeping"
+            # Show current value of the sensor it points to
+            sensor_val=$(get_state "$current" 2>/dev/null || echo "unknown")
+            echo "   ⏭️  $label already set to '$current' (current value: $sensor_val) — keeping"
         else
             echo "   $label"
             echo "   Example: $example"
             read -r -p "   Enter entity ID (or press Enter to skip): " sensor_val
             if [ -n "$sensor_val" ]; then
+                # Show live value of the entered sensor
+                live_val=$(get_state "$sensor_val" 2>/dev/null || echo "unknown")
                 set_text "$entity_id" "$sensor_val"
-                echo "   ✅ $label set to $sensor_val"
+                echo "   ✅ $label set to $sensor_val (current value: $live_val)"
             else
                 echo "   ⏭️  Skipped"
             fi
@@ -384,6 +394,23 @@ if [ "$MODE" = "full" ]; then
     set_datetime_if_default "input_datetime.sems_curtailment_end"   "17:00:00" "Curtailment End"
 
     reload_yaml
+fi
+
+# -----------------------------------------------------------------------------
+# Test SEMS connection
+# -----------------------------------------------------------------------------
+if [ "$MODE" = "full" ] && grep -q "^sems_email:" $SECRETS && grep -q "^sems_inverter_sn:" $SECRETS; then
+    echo ""
+    echo "📡 Testing SEMS connection..."
+    SEMS_EMAIL=$(grep "^sems_email:" $SECRETS | sed "s/sems_email: *//" | tr -d '"')
+    SEMS_SN=$(grep "^sems_inverter_sn:" $SECRETS | sed "s/sems_inverter_sn: *//" | tr -d '"')
+    result=$(python3 /config/scripts/sems_power.py 100 2>&1) && {
+        echo "   ✅ SEMS connection successful"
+        # Restore limit to 100% after test
+    } || {
+        echo "   ⚠️  SEMS connection failed — check sems_email, sems_password and sems_inverter_sn in secrets.yaml"
+        echo "   $result"
+    }
 fi
 
 echo ""
