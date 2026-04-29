@@ -39,14 +39,13 @@
         - condition: template
           value_template: "{{ price_state in ['unknown', 'unavailable'] or polled_state in ['unknown', 'unavailable'] }}"
       then:
-        - service: notify.notification
+        - service: persistent_notification.create
           data:
             title: "⚠️ SEMS Curtailment — Missing Dependency"
+            notification_id: sems_amber_dependency
             message: >
               hacs-custom-amber-integration does not appear to be installed or
               is not yet providing price data.
-
               SEMS curtailment automations require Amber Electric prices to function.
               Please install hacs-custom-amber-integration from HACS first.
-
               Repository: https://github.com/kane81/hacs-custom-amber-integration
