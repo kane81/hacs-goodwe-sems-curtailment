@@ -26,16 +26,33 @@
 
 ### Have on hand before starting
 
+**SEMS Account**
+
 | What | Notes |
 |---|---|
-| **Battery SOC sensor entity ID** | Find in Developer Tools → States. Example: `sensor.al7011025073833_instantaneous_battery_soc` |
-| **Battery I/O Power sensor entity ID** | Negative = charging. Example: `sensor.al7011025073833_instantaneous_battery_i_o` |
-| **House Load sensor entity ID** | Example: `sensor.al7011025073833_instantaneous_load` |
-| **Solar Production sensor entity ID** | Example: `sensor.al7011025073833_instantaneous_generation` |
-| **Grid Power sensor entity ID** | Example: `sensor.al7011025073833_instantaneous_grid_i_o_total` |
-| **Inverter rated capacity** | In watts — e.g. GW10K-MS = 10000W |
-| **Battery max charge rate** | In watts — e.g. AlphaESS Smile5 = 4640W |
-| **Battery usable capacity** | In kWh — check your battery spec sheet |
+| **SEMS Portal login email** | Your GoodWe SEMS Portal account email |
+| **SEMS Portal password** | Your GoodWe SEMS Portal account password |
+| **Inverter serial number** | Printed on the label on your inverter |
+
+**Battery & Inverter Details**
+
+| What | Notes |
+|---|---|
+| **Solar inverter capacity** | Rated output in watts — e.g. GW10K-MS = **10000W** |
+| **Battery max charge rate** | Maximum charge rate in watts — e.g. AlphaESS Smile5 = **4640W** |
+| **Battery Capacity** | Usable storage in kWh — e.g. AlphaESS Smile5 = **9.6 kWh**. This is used to calculate time-to-full on the dashboard card. |
+
+**Sensor Entity IDs**
+
+These tell the integration which sensors to read from your battery integration. Find them in **Developer Tools → States**.
+
+| What | Notes |
+|---|---|
+| **Battery SOC sensor** | State of charge 0–100%. Example: `sensor.al7011025073833_instantaneous_battery_soc` |
+| **Battery I/O Power sensor** | Negative = charging, positive = discharging. Example: `sensor.al7011025073833_instantaneous_battery_i_o` |
+| **House Load sensor** | Current house consumption in watts. Example: `sensor.al7011025073833_instantaneous_load` |
+| **Solar Production sensor** | Current solar generation in watts. Example: `sensor.al7011025073833_instantaneous_generation` |
+| **Grid Power sensor** | Positive = importing, negative = exporting. Example: `sensor.al7011025073833_instantaneous_grid_i_o_total` |
 
 The install script will prompt you to enter all of these — just copy and paste.
 

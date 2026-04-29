@@ -2,7 +2,7 @@ title: SEMS
 views:
   - type: sections
     title: SEMS
-    path: solar
+    path: sems
     icon: mdi:solar-power
     max_columns: 2
     sections:
@@ -110,6 +110,18 @@ views:
               &nbsp;&nbsp;{{ ic_force_charge }} **Charge** <= {{ (max_buy_price * 100) | round(0) | int }}c · Max SOC {{ max_soc_charge | int }}% · {{ fc_start }}–{{ fc_end }}
               &nbsp;&nbsp;{{ ic_block_ss }} **Block Smart Shift** - {{ ss_block_start }}–{{ ss_block_end }}{{ ' · Active' if ss_blocked else '' }}
               &nbsp;&nbsp;{{ ic_neg_notify }} **Negative Price Notify**
+
+          - type: tile
+            entity: automation.amber_price_poller
+            name: Poll Amber Prices Now
+            icon: mdi:refresh
+            tap_action:
+              action: perform-action
+              perform_action: automation.trigger
+              target:
+                entity_id: automation.amber_price_poller
+            grid_options:
+              columns: full
 
           - type: tile
             entity: input_boolean.amber_enable_block_smart_shift

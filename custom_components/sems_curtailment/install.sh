@@ -59,6 +59,35 @@ touch $SECRETS
 HA_URL=$(grep "^ha_url:" $SECRETS 2>/dev/null | sed 's/ha_url: *//' | tr -d '"' || echo "http://localhost:8123")
 HA_TOKEN=$(grep "^ha_long_lived_token:" $SECRETS 2>/dev/null | sed 's/ha_long_lived_token: *//' | tr -d '"')
 
+# -----------------------------------------------------------------------------
+# Prompt for SEMS credentials if not already set
+# -----------------------------------------------------------------------------
+if [ "$MODE" = "full" ]; then
+    echo ""
+    echo "🔑 Checking SEMS credentials in secrets.yaml..."
+
+    prompt_if_missing() {
+        local key=$1 label=$2
+        if ! grep -q "^${key}:" $SECRETS; then
+            echo ""
+            echo -n "   Enter $label: "
+            read -r value
+            if [ -n "$value" ]; then
+                echo "${key}: "${value}"" >> $SECRETS
+                echo "   ✅ ${key} saved"
+            else
+                echo "   ⚠️  Skipped — add ${key} to secrets.yaml manually"
+            fi
+        else
+            echo "   ⏭️  ${key} already set — skipping"
+        fi
+    }
+
+    prompt_if_missing "sems_email"       "SEMS Portal login email"
+    prompt_if_missing "sems_password"    "SEMS Portal password"
+    prompt_if_missing "sems_inverter_sn" "Inverter serial number (on inverter label)"
+fi
+
 # Check if token is present (should be set by Amber install) — prompt if not
 if [ "$MODE" = "full" ] && [ -z "$HA_TOKEN" ]; then
     echo ""
@@ -238,11 +267,16 @@ else
     echo "✅ homeassistant: packages: — added"
 fi
 
-if grep -q "lovelace-sems" $CONFIG && [ -f "$DASHBOARD_FILE" ]; then
+if grep -q "lovelace-sems" $CONFIG; then
     echo "✅ lovelace dashboard entry — found"
 elif [ -f "$DASHBOARD_FILE" ]; then
-    if grep -q "^lovelace:" $CONFIG; then
-        sed -i "/^lovelace:/a\\  dashboards:\n    lovelace-sems:\n      mode: yaml\n      title: SEMS\n      icon: mdi:solar-power\n      filename: lovelace/sems.yaml\n      show_in_sidebar: true" $CONFIG
+    if grep -q "lovelace-amber" $CONFIG; then
+        # Amber already added lovelace: dashboards: — add SEMS entry under existing dashboards:
+        sed -i "/lovelace-amber:/a\    lovelace-sems:\n      mode: yaml\n      title: SEMS\n      icon: mdi:solar-power\n      filename: lovelace/sems.yaml\n      show_in_sidebar: true" $CONFIG
+        echo "✅ lovelace dashboard entry — added under existing Amber dashboards:"
+    elif grep -q "^lovelace:" $CONFIG; then
+        sed -i "/^lovelace:/a\  dashboards:\n    lovelace-sems:\n      mode: yaml\n      title: SEMS\n      icon: mdi:solar-power\n      filename: lovelace/sems.yaml\n      show_in_sidebar: true" $CONFIG
+        echo "✅ lovelace dashboard entry — added"
     else
         echo "" >> $CONFIG
         echo "lovelace:" >> $CONFIG
@@ -253,8 +287,8 @@ elif [ -f "$DASHBOARD_FILE" ]; then
         echo "      icon: mdi:solar-power" >> $CONFIG
         echo "      filename: lovelace/sems.yaml" >> $CONFIG
         echo "      show_in_sidebar: true" >> $CONFIG
+        echo "✅ lovelace dashboard entry — added"
     fi
-    echo "✅ lovelace dashboard entry — added"
 fi
 
 if [ -f "/config/packages/amber.yaml" ]; then
@@ -271,9 +305,37 @@ fi
 if [ "$MODE" = "full" ]; then
     reload_yaml
 
+    # ── System settings ────────────────────────────────────────────────────
+    echo ""
+    echo "⚙️  Battery & Inverter Details"
+    echo "   Press Enter to accept the default value shown in brackets."
+    echo ""
+
+    prompt_number() {
+        local entity_id=$1 label=$2 default=$3 unit=$4 min_val=$5
+        if [ "$(number_needs_default "$entity_id" "$min_val")" = "yes" ]; then
+            read -r -p "   $label [$default $unit]: " num_val
+            num_val=${num_val:-$default}
+            ha_post "services/input_number/set_value" "{\"entity_id\": \"$entity_id\", \"value\": $num_val}" > /dev/null
+            echo "   ✅ $label set to $num_val $unit"
+        else
+            current=$(get_state "$entity_id")
+            echo "   ⏭️  $label already set to $current $unit — keeping"
+        fi
+    }
+
+    prompt_number "input_number.sems_inverter_capacity_w"  \
+        "Inverter rated capacity (e.g. GW10K-MS = 10000)" 10000 "W" 0
+    prompt_number "input_number.battery_max_charge_rate_w" \
+        "Battery max charge rate (AlphaESS Smile5 = 4640)" 3000 "W" 0
+    prompt_number "input_number.battery_capacity_kwh"      \
+        "Battery Capacity" 10 "kWh" 0
+    prompt_number "input_number.sems_load_threshold_watts" \
+        "Load change threshold (min watts change before API call)" 500 "W" 0
+
     # ── Sensor entity IDs ──────────────────────────────────────────────────
     echo ""
-    echo "🔌 Configure Battery Sensor Entity IDs"
+    echo "🔌 Battery Sensor Entity IDs"
     echo "   These tell the integration which sensors to read from your battery."
     echo "   Find your sensor IDs in Developer Tools → States."
     echo "   Press Enter to skip any sensor and configure it later in Overview → Devices → Helpers."
@@ -310,34 +372,6 @@ if [ "$MODE" = "full" ]; then
         "sensor.al7011025073833_instantaneous_generation"
     prompt_sensor "input_text.sensor_grid"         "Grid Power sensor (negative=export)" \
         "sensor.al7011025073833_instantaneous_grid_i_o_total"
-
-    # ── System settings ────────────────────────────────────────────────────
-    echo ""
-    echo "⚙️  System Settings"
-    echo "   Press Enter to accept the default value shown in brackets."
-    echo ""
-
-    prompt_number() {
-        local entity_id=$1 label=$2 default=$3 unit=$4 min_val=$5
-        if [ "$(number_needs_default "$entity_id" "$min_val")" = "yes" ]; then
-            read -r -p "   $label [$default $unit]: " num_val
-            num_val=${num_val:-$default}
-            ha_post "services/input_number/set_value" "{\"entity_id\": \"$entity_id\", \"value\": $num_val}" > /dev/null
-            echo "   ✅ $label set to $num_val $unit"
-        else
-            current=$(get_state "$entity_id")
-            echo "   ⏭️  $label already set to $current $unit — keeping"
-        fi
-    }
-
-    prompt_number "input_number.sems_inverter_capacity_w"  \
-        "Inverter rated capacity (e.g. GW10K-MS = 10000)" 10000 "W" 0
-    prompt_number "input_number.battery_max_charge_rate_w" \
-        "Battery max charge rate (AlphaESS Smile5 = 4640)" 3000 "W" 0
-    prompt_number "input_number.battery_capacity_kwh"      \
-        "Battery usable capacity" 10 "kWh" 0
-    prompt_number "input_number.sems_load_threshold_watts" \
-        "Load change threshold (min watts change before API call)" 500 "W" 0
 
     # ── Enable booleans ────────────────────────────────────────────────────
     echo ""

@@ -108,7 +108,7 @@ input_number:
     # No initial: — HA restores the last value you set after first install.
     unit_of_measurement: W
 
-  # Battery usable capacity in kWh
+  # Battery Capacity in kWh
   # Used by battery.yaml template to calculate time to full
   battery_capacity_kwh:
     name: Battery Capacity
