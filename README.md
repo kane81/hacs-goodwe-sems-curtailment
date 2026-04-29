@@ -8,13 +8,37 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![](https://img.shields.io/badge/dynamic/json?color=41BDF5&logo=home-assistant&label=integration%20usage&suffix=%20installs&cacheSeconds=15600&url=https://analytics.home-assistant.io/custom_integrations.json&query=$.sems_curtailment.total)](https://analytics.home-assistant.io)
 
-> **Controls GoodWe solar inverter output via the SEMS Portal API based on Amber Electric pricing, preventing unwanted solar export when prices are negative.**
+> A Home Assistant custom integration for **[GoodWe](https://www.goodwe.com/)** solar inverters that controls inverter output via the **[SEMS Portal](https://www.semsportal.com/)** API based on **[Amber Electric](https://www.amber.com.au/)** real-time pricing — automatically curtailing solar export when prices are negative and optimising self-consumption.
 
 ---
 
 ## ⚠️ Requires hacs-custom-amber-integration
 
 **This integration depends on [hacs-custom-amber-integration](https://github.com/kane81/hacs-custom-amber-integration).** It reads the Amber Electric price helpers populated by that project. Install and configure that project first before proceeding.
+
+> **⚠️ IMPORTANT:** After installing via HACS, open **Advanced SSH & Web Terminal** and run:
+> ```bash
+> bash /config/custom_components/sems_curtailment/install.sh
+> ```
+> This is required to complete setup. Refer to the README installation steps below.
+
+---
+
+## Features
+
+| Feature | Description |
+|---|---|
+| **Negative buy price curtailment** | Sets inverter to 0% when Amber buy price goes negative — stops solar export to avoid paying to export |
+| **Negative sell price curtailment** | Curtails inverter to match house load + battery charge rate when sell price goes negative |
+| **Real-time load tracking** | Adjusts inverter limit in real-time as house load changes during curtailment |
+| **Window management** | Resets inverter to 100% at window start and end — clean slate every day |
+| **Amber dependency check** | Notifies on startup if hacs-custom-amber-integration is not providing price data |
+
+---
+
+## ⚠️ Disclaimer
+
+This project uses the SEMS Portal API which is not publicly documented or officially supported. GoodWe may change or remove it at any time without notice. This project has no affiliation with GoodWe or SEMS. Use at your own risk — changing inverter output limits directly affects your solar system. The author accepts no responsibility for energy costs, equipment damage or system issues.
 
 ---
 
@@ -55,24 +79,6 @@ These tell the integration which sensors to read from your battery integration. 
 | **Grid Power sensor** | Positive = importing, negative = exporting. Example: `sensor.al7011025073833_instantaneous_grid_i_o_total` |
 
 The install script will prompt you to enter all of these — just copy and paste.
-
----
-
-## ⚠️ Disclaimer
-
-This project uses the SEMS Portal API which is not publicly documented or officially supported. GoodWe may change or remove it at any time without notice. This project has no affiliation with GoodWe or SEMS. Use at your own risk — changing inverter output limits directly affects your solar system. The author accepts no responsibility for energy costs, equipment damage or system issues.
-
----
-
-## What It Does
-
-| Feature | Description |
-|---|---|
-| **Negative buy price curtailment** | Sets inverter to 0% when Amber buy price goes negative — stops solar export to avoid paying to export |
-| **Negative sell price curtailment** | Curtails inverter to match house load + battery charge rate when sell price goes negative |
-| **Real-time load tracking** | Adjusts inverter limit in real-time as house load changes during curtailment |
-| **Window management** | Resets inverter to 100% at window start and end — clean slate every day |
-| **Amber dependency check** | Notifies on startup if hacs-custom-amber-integration is not providing price data |
 
 ---
 
@@ -398,3 +404,11 @@ MIT — see [LICENSE](LICENSE) file. See disclaimer above regarding the undocume
 ## Contributing
 
 Issues and PRs welcome. Contributions should include testing against the current SEMS+ app to verify API compatibility.
+
+---
+
+## Credits
+
+- **[hacs-custom-amber-integration](https://github.com/kane81/hacs-custom-amber-integration)** — the companion Amber Electric integration this project depends on
+- **[Official Amber Electric Integration](https://www.home-assistant.io/integrations/amberelectric/)**
+- Thanks to **hudakh**, **chrismalec87**, 6minchinbury, **Jacob Kairl** and the rest of the beta testers.

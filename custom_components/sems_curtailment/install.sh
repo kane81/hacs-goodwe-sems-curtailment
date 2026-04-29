@@ -54,7 +54,7 @@ cp -v $SRC/templates/*.yaml /config/templates/
 # Load credentials
 # -----------------------------------------------------------------------------
 SECRETS=/config/secrets.yaml
-touch $SECRETS
+[ -f "$SECRETS" ] || echo "" > "$SECRETS"
 
 HA_URL=$(grep "^ha_url:" $SECRETS 2>/dev/null | sed 's/ha_url: *//' | tr -d '"' || echo "http://localhost:8123")
 HA_TOKEN=$(grep "^ha_long_lived_token:" $SECRETS 2>/dev/null | sed 's/ha_long_lived_token: *//' | tr -d '"')
