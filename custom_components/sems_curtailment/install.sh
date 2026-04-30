@@ -364,7 +364,15 @@ if [ "$MODE" = "full" ]; then
                 # Show live value of the entered sensor
                 live_val=$(get_state "$sensor_val" 2>/dev/null || echo "unknown")
                 set_text "$entity_id" "$sensor_val"
-                echo "   ✅ $label set to $sensor_val (current value: $live_val)"
+                if [ -z "$live_val" ] || [ "$live_val" = "unknown" ] || [ "$live_val" = "unavailable" ]; then
+                    echo "   ⚠️  $label set to $sensor_val"
+                    echo "      No value detected — check the entity ID is correct."
+                    echo "      Go to the entity → click the ⚙️ cog → copy the Entity ID."
+                    echo "      It must be the full ID including the domain e.g. sensor.your_entity_name"
+                    echo "      You can update it later in Overview → Devices → Helpers."
+                else
+                    echo "   ✅ $label set to $sensor_val (current value: $live_val)"
+                fi
             else
                 echo "   ⏭️  Skipped"
             fi

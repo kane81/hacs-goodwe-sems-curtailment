@@ -68,7 +68,15 @@ This project uses the SEMS Portal API which is not publicly documented or offici
 
 **Sensor Entity IDs**
 
-These tell the integration which sensors to read from your battery. The integration can function without them but curtailment calculations will be less accurate. Find your sensor IDs in **Developer Tools → States**.
+These tell the integration which sensors to read from your battery. The integration can function without them but curtailment calculations will be less accurate.
+
+**How to find your sensor Entity IDs:**
+1. Go to **Settings → Devices & Services** → find your battery integration
+2. Click on the entity you want (e.g. Battery SOC)
+3. Click the **⚙️ cog** icon → copy the **Entity ID**
+4. The Entity ID must be the full ID including the domain — e.g. `sensor.al7011025073833_instantaneous_battery_soc`
+
+Alternatively go to **Developer Tools → States** and search for your battery name.
 
 | What | Notes |
 |---|---|
@@ -122,6 +130,8 @@ Open **Advanced SSH & Web Terminal** and run:
 ```bash
 bash /config/custom_components/sems_curtailment/install.sh
 ```
+> 💡 **Terminal tip:** To paste into the terminal use **Right Click → Paste**. Do not use Ctrl+V — it will not work in the HA terminal.
+
 
 The script walks you through the following steps:
 
@@ -180,6 +190,8 @@ Answer **Y** to create the **SEMS** dashboard in your sidebar, or **n** to skip 
 ```
 
 **Step 4e — Battery Sensor Entity IDs**
+
+> 💡 **Finding your Entity IDs:** Go to the entity → click the **⚙️ cog** → copy the **Entity ID**. It must be the full ID including the domain e.g. `sensor.your_entity_name`. You can also find them in **Developer Tools → States**.
 
 ```
 🔌 Battery Sensor Entity IDs
