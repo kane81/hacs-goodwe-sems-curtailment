@@ -301,6 +301,20 @@ All controls are available in the **SEMS** dashboard sidebar or via **Overview �
 
 > **Manual Disable Solar** does not turn the inverter off — a small amount of power will still leak through. This is intentional as a fully powered-off inverter takes several minutes to restart.
 
+## Advanced Tuning
+
+### Full SOC Threshold (`SEMS Full SOC Threshold`)
+
+By default the integration treats the battery as full when SOC reaches **98%** — switching curtailment from `load + charge rate` to `load only`. This is needed because battery sensors often report values like 98.8% rather than exactly 100%.
+
+If curtailment is reducing output too early (battery still charging aggressively at 98%), increase the threshold. If it's not reducing at near-full SOC, decrease it.
+
+To adjust: **Overview → Devices → Helpers** → search for **SEMS Full SOC Threshold** → set your preferred value (90–100%).
+
+Default: **98%**
+
+---
+
 ## Troubleshooting
 
 **Dependency warning on startup** — install [hacs-custom-amber-integration](https://github.com/kane81/hacs-custom-amber-integration) and ensure it is polling prices. Check `amber_general_price_actual` in Developer Tools → States.

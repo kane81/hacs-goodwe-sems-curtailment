@@ -202,37 +202,53 @@ if [ "$MODE" = "full" ]; then
     echo ""
     echo "📊 Dashboard"
     DASHBOARD_DIR="/config/lovelace"
-    DASHBOARD_FILE="$DASHBOARD_DIR/sems.yaml"
-    LOVELACE_SRC="$SRC/lovelace/sems.yaml"
 
     mkdir -p "$DASHBOARD_DIR"
 
-    if [ -f "$DASHBOARD_FILE" ]; then
-        echo "   ℹ️  SEMS dashboard already exists."
-        read -r -p "   Overwrite with default? This resets any customisations. (y/N): " overwrite_dash
-        if [[ "$overwrite_dash" =~ ^[Yy]$ ]]; then
-            if [ -f "$LOVELACE_SRC" ]; then
-                cp "$LOVELACE_SRC" "$DASHBOARD_FILE"
-                echo "   ✅ Dashboard overwritten: $DASHBOARD_FILE"
+    install_dashboard() {
+        local file=$1 src=$2 label=$3
+        if [ -f "$file" ]; then
+            echo "   ℹ️  $label already exists."
+            read -r -p "   Overwrite with default? This resets any customisations. (y/N): " overwrite_dash
+            if [[ "$overwrite_dash" =~ ^[Yy]$ ]]; then
+                [ -f "$src" ] && cp "$src" "$file" && echo "   ✅ $label overwritten" || echo "   ⚠️  Template not found: $src"
             else
-                echo "   ⚠️  Dashboard template not found: $LOVELACE_SRC"
+                echo "   ⏭️  Keeping existing $label"
             fi
         else
-            echo "   ⏭️  Keeping existing dashboard"
+            read -r -p "   Create $label in sidebar? (Y/n): " create_dash
+            if [[ ! "$create_dash" =~ ^[Nn]$ ]]; then
+                [ -f "$src" ] && cp "$src" "$file" && echo "   ✅ $label created" || echo "   ⚠️  Template not found: $src"
+            else
+                echo "   Skipped"
+            fi
         fi
-    else
-        read -r -p "   Create SEMS dashboard in sidebar? (Y/n): " create_dash
-        if [[ ! "$create_dash" =~ ^[Nn]$ ]]; then
-            if [ -f "$LOVELACE_SRC" ]; then
-                cp "$LOVELACE_SRC" "$DASHBOARD_FILE"
-                echo "   ✅ Dashboard created: $DASHBOARD_FILE"
-            else
-                echo "   ⚠️  Dashboard template not found: $LOVELACE_SRC"
-            fi
-        else
+    }
+
+    echo ""
+    echo "   Dashboard options:"
+    echo "   1) SEMS only — shows SEMS solar, battery and power data + all controls"
+    echo "   2) Unified — SEMS + Amber together in one dashboard (two tabs)"
+    echo "   3) Both — install both dashboards"
+    echo "   4) Skip — no dashboard"
+    echo ""
+    read -r -p "   Choose [1/2/3/4]: " dash_choice
+
+    case "$dash_choice" in
+        1)
+            install_dashboard "$DASHBOARD_DIR/sems.yaml" "$SRC/lovelace/sems.yaml" "SEMS dashboard"
+            ;;
+        2)
+            install_dashboard "$DASHBOARD_DIR/sems_unified.yaml" "$SRC/lovelace/sems_unified.yaml" "Solar & Amber unified dashboard"
+            ;;
+        3)
+            install_dashboard "$DASHBOARD_DIR/sems.yaml" "$SRC/lovelace/sems.yaml" "SEMS dashboard"
+            install_dashboard "$DASHBOARD_DIR/sems_unified.yaml" "$SRC/lovelace/sems_unified.yaml" "Solar & Amber unified dashboard"
+            ;;
+        *)
             echo "   Skipped — see Dashboard Card section in README to add manually later."
-        fi
-    fi
+            ;;
+    esac
 fi
 
 # -----------------------------------------------------------------------------
@@ -267,9 +283,12 @@ else
     echo "✅ homeassistant: packages: — added"
 fi
 
+DASHBOARD_FILE="$DASHBOARD_DIR/sems.yaml"
+DASHBOARD_FILE_UNIFIED="$DASHBOARD_DIR/sems_unified.yaml"
+
 if grep -q "lovelace-sems" $CONFIG; then
     echo "✅ lovelace dashboard entry — found"
-elif [ -f "$DASHBOARD_FILE" ]; then
+elif [ -f "$DASHBOARD_FILE" ] || [ -f "$DASHBOARD_FILE_UNIFIED" ]; then
     if grep -q "lovelace-amber" $CONFIG; then
         # Add under existing lovelace block
         cat >> $CONFIG << 'LOVELACE'
@@ -296,6 +315,20 @@ LOVELACE
         echo "✅ lovelace dashboard entry — added"
     fi
 fi
+
+# Add unified dashboard lovelace entry if it was installed
+if [ -f "$DASHBOARD_FILE_UNIFIED" ] && ! grep -q "lovelace-solar-amber" $CONFIG; then
+    cat >> $CONFIG << 'LOVELACE'
+    lovelace-solar-amber:
+      mode: yaml
+      title: Solar & Amber
+      icon: mdi:solar-power
+      filename: lovelace/sems_unified.yaml
+      show_in_sidebar: true
+LOVELACE
+    echo "✅ lovelace unified dashboard entry — added"
+fi
+
 
 if [ -f "/config/packages/amber.yaml" ]; then
     echo "✅ hacs-custom-amber-integration package found"
@@ -429,6 +462,7 @@ if [ "$MODE" = "full" ]; then
     set_boolean_if_new "input_boolean.sems_enable_load_tracking" "off"
 
     # ── Curtailment times (silent defaults only) ───────────────────────────
+    set_number_if_default   "input_number.sems_full_soc_threshold"   98        "Full SOC Threshold"        90
     set_datetime_if_default "input_datetime.sems_curtailment_start" "09:00:00" "Curtailment Start"
     set_datetime_if_default "input_datetime.sems_curtailment_end"   "17:00:00" "Curtailment End"
 

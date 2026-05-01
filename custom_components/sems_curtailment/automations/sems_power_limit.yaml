@@ -25,7 +25,7 @@
 #   Buy price negative  → set inverter to 0%
 #   Sell SPOT negative  → curtail based on SOC
 #       SOC < 100% → target = max(load + battery charge rate, max charge floor)
-#       SOC >= 98% → target = load only (battery considered full)
+#       SOC >= full_soc_threshold% → target = load only (battery considered full)
 #   Prices positive     → set inverter to 100%
 #       ↓
 #   Only calls SEMS API if limit has changed from stored value
@@ -167,6 +167,7 @@
         max_battery_charge_w:  "{{ states('input_number.battery_max_charge_rate_w') | float(4640) }}"
         floor_pct:             "{{ ((max_battery_charge_w / inverter_capacity_w) * 100) | round(0) | int }}"
         soc:    "{{ states(states('input_text.sensor_battery_soc')) | float(0) }}"
+        full_soc_threshold: "{{ states('input_number.sems_full_soc_threshold') | float(98) }}"
         load_w: "{{ states(states('input_text.sensor_load')) | float(0) }}"
         battery_w: "{{ states(states('input_text.sensor_battery_io')) | float(0) }}"
         battery_charge_w: "{{ battery_w | abs if battery_w < 0 else 0 }}"
@@ -276,7 +277,7 @@
                 entity_id: input_boolean.sems_curtailment_active
             - variables:
                 target_limit: >
-                  {% if soc >= 98 %}
+                  {% if soc >= full_soc_threshold %}
                   {{ [[((load_w / inverter_capacity_w) * 100) | round(0) | int, 1] | max, 100] | min }}
                   {% elif soc >= 95 %}
                   {% set calculated = (((load_w + battery_charge_w) / inverter_capacity_w) * 100) | round(0) | int %}

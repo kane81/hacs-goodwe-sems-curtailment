@@ -161,6 +161,18 @@ input_boolean:
   # Enables price-based inverter curtailment
   # Default: OFF — turn ON to activate curtailment based on Amber prices
   # Note: window start/end inverter resets to 100% always run even when OFF
+  sems_full_soc_threshold:
+    name: "SEMS Full SOC Threshold"
+    min: 90
+    max: 100
+    step: 1
+    # No initial: — HA restores last value on restart.
+    # Default set by install script to 98.
+    # Increase if battery still charging aggressively at threshold.
+    # Decrease if curtailment is not reducing at near-full SOC.
+    unit_of_measurement: "%"
+    icon: mdi:battery-high
+
   sems_manual_disable_solar:
     name: "Manual Disable Solar"
     # initial: false is intentional — resets on restart
