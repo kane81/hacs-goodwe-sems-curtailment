@@ -25,7 +25,7 @@
 #   Buy price negative  → set inverter to 0%
 #   Sell SPOT negative  → curtail based on SOC
 #       SOC < 100% → target = max(load + battery charge rate, max charge floor)
-#       SOC >= 99% → target = load only (battery considered full)
+#       SOC >= 98% → target = load only (battery considered full)
 #   Prices positive     → set inverter to 100%
 #       ↓
 #   Only calls SEMS API if limit has changed from stored value
@@ -276,7 +276,7 @@
                 entity_id: input_boolean.sems_curtailment_active
             - variables:
                 target_limit: >
-                  {% if soc >= 99 %}
+                  {% if soc >= 98 %}
                   {{ [[((load_w / inverter_capacity_w) * 100) | round(0) | int, 1] | max, 100] | min }}
                   {% elif soc >= 95 %}
                   {% set calculated = (((load_w + battery_charge_w) / inverter_capacity_w) * 100) | round(0) | int %}

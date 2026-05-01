@@ -86,7 +86,7 @@
 {% set ttf_str       = 'Full in ' ~ ttf_h ~ 'h ' ~ ttf_m ~ 'm — approx ' ~ ttf_finish %}
 {% set bat_state = '← Charging ' ~ bat_disp ~ ' - ' ~ soc | round(0) | int ~ '%
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' ~ ttf_str if (battery_w < 0 and soc < 100)
-  else '← Charging ' ~ bat_disp ~ ' - 100% (Full)' if (battery_w < 0 and soc >= 99)
+  else '← Charging ' ~ bat_disp ~ ' - 100% (Full)' if (battery_w < 0 and soc >= 98)
   else '- Discharging ' ~ bat_disp ~ ' - ' ~ soc | round(0) | int ~ '%' if battery_w > 0
   else '- Idle · ' ~ soc | round(0) | int ~ '%' %}
 {# --- Automation icon logic --- #}
