@@ -109,6 +109,9 @@
       entity_id: input_text.sensor_load
       id: sensor_change
   condition:
+    - condition: state
+      entity_id: input_boolean.sems_manual_disable_solar
+      state: "off"
     # Gate: only proceed if this automation has been enabled by the user.
     # input_boolean.sems_enable_load_tracking defaults to OFF so this
     # automation is inert until explicitly turned on from Settings → Helpers.
@@ -142,7 +145,7 @@
         battery_w: "{{ states(states('input_text.sensor_battery_io')) | float(0) }}"
         battery_charge_w: "{{ battery_w | abs if battery_w < 0 else 0 }}"
         target_limit: >
-          {% if soc >= 100 %}
+          {% if soc >= 99 %}
           {{ [[((load_w / inverter_capacity_w) * 100) | round(0) | int, 1] | max, 100] | min }}
           {% elif soc >= 95 %}
           {% set calculated = (((load_w + battery_charge_w) / inverter_capacity_w) * 100) | round(0) | int %}
@@ -153,7 +156,7 @@
           {% endif %}
         current_limit_w: "{{ (current_limit / 100) * inverter_capacity_w }}"
         target_w: >
-          {% if soc >= 100 %}
+          {% if soc >= 99 %}
           {{ load_w }}
           {% else %}
           {{ [load_w + battery_charge_w, max_battery_charge_w] | max }}

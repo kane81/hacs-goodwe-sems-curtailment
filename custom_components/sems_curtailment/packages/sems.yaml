@@ -161,6 +161,12 @@ input_boolean:
   # Enables price-based inverter curtailment
   # Default: OFF — turn ON to activate curtailment based on Amber prices
   # Note: window start/end inverter resets to 100% always run even when OFF
+  sems_manual_disable_solar:
+    name: "Manual Disable Solar"
+    # initial: false is intentional — resets on restart
+    initial: false
+    icon: mdi:solar-power-variant-outline
+
   sems_enable_power_limit:
     name: "Enable Automation: SEMS Solar Curtailment"
     # No initial: — HA restores last known state on restart.

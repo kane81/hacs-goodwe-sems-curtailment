@@ -79,7 +79,8 @@ views:
               {% set ttf_finish    = (now().timestamp() + hours_to_full * 3600) | timestamp_custom('%I:%M %p') %}
               {% set ttf_str       = 'Full in ' ~ ttf_h ~ 'h ' ~ ttf_m ~ 'm — approx ' ~ ttf_finish %}
               {% set bat_state = '← Charging ' ~ bat_disp ~ ' - ' ~ soc | round(0) | int ~ '%
-              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' ~ ttf_str if battery_w < 0
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' ~ ttf_str if (battery_w < 0 and soc < 100)
+                else '← Charging ' ~ bat_disp ~ ' - 100% (Full)' if (battery_w < 0 and soc >= 100)
                 else '- Discharging ' ~ bat_disp ~ ' - ' ~ soc | round(0) | int ~ '%' if battery_w > 0
                 else '- Idle · ' ~ soc | round(0) | int ~ '%' %}
               {# --- Automation icon logic --- #}
@@ -120,6 +121,12 @@ views:
               perform_action: automation.trigger
               target:
                 entity_id: automation.amber_price_poller
+            grid_options:
+              columns: full
+
+          - type: tile
+            entity: input_boolean.sems_manual_disable_solar
+            name: Manual Disable Solar
             grid_options:
               columns: full
 

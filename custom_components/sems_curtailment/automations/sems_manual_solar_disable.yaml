@@ -1,0 +1,65 @@
+################################################################################
+# SEMS Manual Solar Disable
+################################################################################
+#
+#   Instantly sets the inverter output to 0% when the Manual Disable Solar
+#   toggle is turned ON, and restores it to 100% when turned OFF.
+#
+#   This is a manual override independent of the curtailment automation.
+#   Use it to quickly stop solar export during peak FiT negative events
+#   or for maintenance purposes.
+#
+# Toggle:
+#   ON  → inverter set to 0% (near-zero output, small leakage expected)
+#   OFF → inverter restored to 100%
+#
+#-------------------------------------------------------------------------------
+# Change Log
+#-------------------------------------------------------------------------------
+#   v1.0    2026-04-30    Kane Li    - Initial version
+################################################################################
+
+- id: sems_manual_solar_disable
+  alias: SEMS Manual Solar Disable
+  trace:
+    stored_traces: 10
+  description: >
+    Instantly sets inverter to 0% when Manual Disable Solar is toggled ON,
+    restores to 100% when toggled OFF.
+  trigger:
+    - platform: state
+      entity_id: input_boolean.sems_manual_disable_solar
+  action:
+    - variables:
+        enabled: "{{ is_state('input_boolean.sems_manual_disable_solar', 'on') }}"
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ enabled }}"
+          sequence:
+            - service: shell_command.sems_set_power_limit
+              data:
+                limit: "0"
+            - service: input_number.set_value
+              target:
+                entity_id: input_number.sems_current_power_limit
+              data:
+                value: 0
+            - service: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.sems_curtailment_active
+        - conditions:
+            - condition: template
+              value_template: "{{ not enabled }}"
+          sequence:
+            - service: shell_command.sems_set_power_limit
+              data:
+                limit: "100"
+            - service: input_number.set_value
+              target:
+                entity_id: input_number.sems_current_power_limit
+              data:
+                value: 100
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.sems_curtailment_active

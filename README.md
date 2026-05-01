@@ -283,6 +283,24 @@ bash /config/custom_components/sems_curtailment/uninstall.sh
 
 Then remove from HACS and restart HA.
 
+## Controls & Helpers
+
+All controls are available in the **SEMS** dashboard sidebar or via **Overview → Devices → Helpers**.
+
+| Helper | Purpose | Default |
+|---|---|---|
+| `Manual Disable Solar` | Instantly sets inverter to 0% output when ON, restores to 100% when OFF. Independent of the curtailment automation — use for quick manual control or maintenance. | OFF |
+| `Enable Automation: SEMS Solar Curtailment` | Enables price-based solar curtailment | OFF |
+| `Enable Automation: SEMS Load Tracking Adjustments` | Enables real-time load-based inverter adjustments | OFF |
+| `SEMS Curtailment Start` | Start of the curtailment window | 09:00 |
+| `SEMS Curtailment End` | End of the curtailment window | 17:00 |
+| `SEMS Load Change Threshold` | Minimum watt change before triggering an API call | 500W |
+| `SEMS Inverter Capacity` | Rated inverter output in watts | 10000W |
+| `Battery Max Charge Rate` | Maximum battery charge rate in watts | 3000W |
+| `Battery Capacity` | Battery usable capacity in kWh | 10 kWh |
+
+> **Manual Disable Solar** does not turn the inverter off — a small amount of power will still leak through. This is intentional as a fully powered-off inverter takes several minutes to restart.
+
 ## Troubleshooting
 
 **Dependency warning on startup** — install [hacs-custom-amber-integration](https://github.com/kane81/hacs-custom-amber-integration) and ensure it is polling prices. Check `amber_general_price_actual` in Developer Tools → States.
