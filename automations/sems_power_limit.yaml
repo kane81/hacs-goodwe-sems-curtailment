@@ -182,6 +182,23 @@
         battery_w: "{{ states(states('input_text.sensor_battery_io')) | float(0) }}"
         battery_charge_w: "{{ battery_w | abs if battery_w < 0 else 0 }}"
     - choose:
+        # ── Automation disabled → restore inverter to 100% ──────────────────
+        - conditions:
+            - condition: trigger
+              id: disabled
+          sequence:
+            - service: shell_command.sems_set_power
+              data:
+                limit: "100"
+            - service: input_number.set_value
+              target:
+                entity_id: input_number.sems_current_power_limit
+              data:
+                value: 100
+            - service: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.sems_curtailment_active
+
         # Window just started - reset inverter to 100% clean slate
         - conditions:
             - condition: trigger

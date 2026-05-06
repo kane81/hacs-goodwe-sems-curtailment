@@ -37,7 +37,7 @@
             - condition: template
               value_template: "{{ enabled }}"
           sequence:
-            - service: shell_command.sems_set_power_limit
+            - service: shell_command.sems_set_power
               data:
                 limit: "0"
             - service: input_number.set_value
@@ -52,7 +52,7 @@
             - condition: template
               value_template: "{{ not enabled }}"
           sequence:
-            - service: shell_command.sems_set_power_limit
+            - service: shell_command.sems_set_power
               data:
                 limit: "100"
             - service: input_number.set_value
