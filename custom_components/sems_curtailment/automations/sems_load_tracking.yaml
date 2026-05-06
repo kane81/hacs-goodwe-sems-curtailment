@@ -108,6 +108,12 @@
     - platform: state
       entity_id: input_text.sensor_load
       id: sensor_change
+    - platform: state
+      entity_id: input_datetime.sems_curtailment_start
+      id: time_change
+    - platform: state
+      entity_id: input_datetime.sems_curtailment_end
+      id: time_change
   condition:
     - condition: state
       entity_id: input_boolean.sems_manual_disable_solar
