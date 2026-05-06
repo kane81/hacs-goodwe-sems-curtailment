@@ -10,9 +10,10 @@
 #       "sync" just copies files — used on HA startup.
 # =============================================================================
 
-set -e
-
 MODE=${1:-full}
+
+# Exit on error in full mode only — sync mode continues on errors
+[ "$MODE" = "full" ] && set -e || true
 SRC=/config/custom_components/sems_curtailment
 CONFIG=/config/configuration.yaml
 ERRORS=0
