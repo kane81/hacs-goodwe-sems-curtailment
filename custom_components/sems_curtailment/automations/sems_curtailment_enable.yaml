@@ -1,0 +1,36 @@
+################################################################################
+# SEMS Curtailment Enable
+################################################################################
+#
+#   Immediately triggers curtailment recalculation when SEMS Solar Curtailment
+#   is turned ON. Without this, curtailment waits for the next Amber poll.
+#
+################################################################################
+
+- id: sems_curtailment_enable
+  alias: SEMS Curtailment Enable
+  trace:
+    stored_traces: 10
+  description: >
+    Immediately recalculates and applies curtailment when the automation
+    is turned ON, without waiting for the next Amber poll.
+  trigger:
+    - platform: state
+      entity_id: input_boolean.sems_enable_power_limit
+      to: "on"
+  condition:
+    - condition: state
+      entity_id: input_boolean.sems_manual_disable_solar
+      state: "off"
+    - condition: template
+      value_template: >
+        {{ now().strftime('%H:%M:%S') >= states('input_datetime.sems_curtailment_start')[0:8]
+           and now().strftime('%H:%M:%S') < states('input_datetime.sems_curtailment_end')[0:8] }}
+    - condition: template
+      value_template: "{{ states('input_number.amber_feed_in_price_actual') not in ['unknown', 'unavailable'] }}"
+  action:
+    - service: automation.trigger
+      target:
+        entity_id: automation.sems_solar_curtailment_based_on_amber_price
+      data:
+        skip_condition: false
