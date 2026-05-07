@@ -1,0 +1,32 @@
+################################################################################
+# SEMS Curtailment Disable
+################################################################################
+#
+#   Restores inverter to 100% when SEMS Solar Curtailment is turned OFF.
+#   Runs independently of sems_power_limit to avoid condition blocking.
+#
+################################################################################
+
+- id: sems_curtailment_disable
+  alias: SEMS Curtailment Disable
+  trace:
+    stored_traces: 10
+  description: >
+    Restores inverter to 100% output when SEMS Solar Curtailment is disabled.
+  trigger:
+    - platform: state
+      entity_id: input_boolean.sems_enable_power_limit
+      to: "off"
+  condition: []
+  action:
+    - service: shell_command.sems_set_power
+      data:
+        limit: "100"
+    - service: input_number.set_value
+      target:
+        entity_id: input_number.sems_current_power_limit
+      data:
+        value: 100
+    - service: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.sems_curtailment_active
