@@ -136,6 +136,10 @@
       at: input_datetime.sems_curtailment_end
       id: window_end
     - platform: state
+      entity_id: input_boolean.sems_enable_power_limit
+      to: "on"
+      id: price_change
+    - platform: state
       entity_id: input_datetime.sems_curtailment_start
       id: time_change
     - platform: state
