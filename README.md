@@ -1,4 +1,6 @@
-<table><tr><td><img src="brand/icon.png" width="80"/></td><td><h1>Home Assistant GoodWe SEMS Curtailment</h1></td></tr></table>
+<p align="center"><img src="custom_components/sems_curtailment/brand/icon.png" width="80"/></p>
+
+# Home Assistant GoodWe SEMS Curtailment
 
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow?logo=buy-me-a-coffee)](https://www.buymeacoffee.com/kane81)
 
