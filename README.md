@@ -113,6 +113,11 @@ This integration requires Amber Electric prices to be available in HA. If you ha
 
 ### Step 3 — Install via HACS
 
+Click the button below to add the repository to HACS:
+
+[![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=kane81&repository=hacs-goodwe-sems-curtailment&category=integration)
+
+Or add manually:
 1. Open **HACS** in your HA sidebar
 2. Click **⋮** (top right) → **Custom repositories**
 3. Paste: `https://github.com/kane81/hacs-goodwe-sems-curtailment`
