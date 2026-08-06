@@ -1,0 +1,64 @@
+################################################################################
+# SEMS Integration - HACS Auto Install
+################################################################################
+#
+#   Runs install.sh on HA startup (sync mode) and after HACS updates (full mode).
+#
+#   Startup (sync mode): quickly copies files only.
+#   HACS update (full mode): full install.
+#
+#-------------------------------------------------------------------------------
+# Change Log
+#-------------------------------------------------------------------------------
+#   v1.0    2026-04-08    Kane Li    - Initial version
+#   v1.1    2026-04-23    Kane Li    - Fixed trigger: HACS 2.0 removed hacs/* events
+#   v1.2    2026-04-23    Kane Li    - Added startup trigger as reliable fallback
+#   v1.3    2026-04-23    Kane Li    - Split into sync (startup) and full (update) modes
+################################################################################
+
+- id: sems_hacs_auto_install
+  alias: SEMS Integration - HACS Auto Install
+  description: >
+    Syncs files on HA startup and runs full install after HACS updates.
+  trigger:
+    # Startup: lightweight file sync only
+    - platform: homeassistant
+      event: start
+      id: startup
+    # HACS update: full install
+    - platform: state
+      entity_id: update.home_assistant_goodwe_sems_curtailment_update
+      to: "off"
+      id: hacs_update
+  action:
+    - delay: "00:01:00"
+    - choose:
+        # Startup — sync mode (fast)
+        - conditions:
+            - condition: trigger
+              id: startup
+          sequence:
+            - service: shell_command.sems_hacs_install
+              data:
+                mode: sync
+              response_variable: result
+        # HACS update — full mode. Notification is sent BEFORE running the
+        # installer: full mode auto-restarts Home Assistant at the end (on
+        # HAOS/Supervised), so anything after the shell command races the
+        # shutdown and may never be delivered.
+        - conditions:
+            - condition: trigger
+              id: hacs_update
+          sequence:
+            - service: notify.notification
+              data:
+                title: "SEMS Integration Updated"
+                message: >
+                  HACS update detected - running the install script now.
+                  Home Assistant will restart automatically to apply it
+                  (on HA OS/Supervised; container installs need a manual
+                  restart). If entities look stale afterwards, run
+                  bash /config/custom_components/sems_curtailment/install.sh
+                  by hand and check its output.
+            - service: shell_command.sems_hacs_install
+              response_variable: result

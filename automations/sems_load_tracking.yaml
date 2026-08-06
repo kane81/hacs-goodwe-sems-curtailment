@@ -1,0 +1,151 @@
+################################################################################
+# SEMS Load Tracking
+################################################################################
+#
+#   While curtailment is active, monitors battery I/O and house load in
+#   real-time and adjusts the GoodWe inverter output limit to track
+#   changing load conditions.
+#
+# How it works:
+#   Battery I/O or load sensor changes
+#       ↓
+#   Load Tracking on? (switch.sems_curtailment_load_tracking)
+#       ↓ No  → do nothing (safe exit - no API calls made)
+#       ↓ Yes
+#   Curtailment Active on AND sell price negative AND buy price not negative?
+#       ↓ Yes
+#   SOC < 100%?
+#       ↓ Yes → target = max(load + battery charge rate, floor %)
+#       ↓ No  → target = load only
+#   Difference from current limit > threshold?
+#       ↓ Yes → call the set_power_limit service
+#
+# Enable / Disable:
+#   Controlled by switch.sems_curtailment_load_tracking (default OFF).
+#
+#   Note: Automatic Curtailment (or a manual Curtailment Active toggle)
+#   should also be on for Load Tracking to be meaningful - it fine-tunes
+#   limits already set by the curtailment automations.
+#
+#-------------------------------------------------------------------------------
+# Dependencies
+#-------------------------------------------------------------------------------
+#   → text.amber_smart_shift_power_battery_sensor
+#   → text.amber_smart_shift_power_battery_level_sensor
+#   → text.amber_smart_shift_power_load_sensor
+#   → sensor.amber_smart_shift_battery_level  (default SOC when no override set)
+#   → sensor.amber_smart_shift_buy_price
+#   → sensor.amber_smart_shift_sell_price
+#   → switch.sems_curtailment_curtailment_active
+#   → switch.sems_curtailment_load_tracking
+#   → number.sems_curtailment_inverter_capacity
+#   → number.sems_curtailment_current_power_limit
+#   → number.sems_curtailment_load_change_threshold
+#   → number.sems_curtailment_full_soc_threshold
+#   → number.sems_curtailment_battery_max_charge_rate
+#   → sems_curtailment.set_power_limit  (service)
+#   → notify.notification  (configured in configuration_example.yaml)
+################################################################################
+
+- id: sems_load_tracking
+  alias: SEMS Load Tracking
+  trace:
+    stored_traces: 20
+  description: >
+    While curtailment is active, monitors battery I/O and load in real-time
+    and adjusts the inverter power limit based on SOC. Controlled by
+    switch.sems_curtailment_load_tracking (default OFF).
+  # Re-evaluates on a timer rather than on a state trigger. The battery
+  # and load readings live behind text.amber_smart_shift_power_*_sensor,
+  # which HOLD an entity_id rather than a value - watching those fires
+  # only when you reconfigure which sensor to use, not when the reading
+  # changes, so a state trigger here never fired in practice. A template
+  # trigger on the indirected value would work, but re-renders on every
+  # tiny wattage change; a fixed tick plus the existing threshold check
+  # below gives good responsiveness with predictable API load.
+  #
+  # 20 seconds is the tick, but it is NOT the API call rate - the
+  # threshold check further down still gates every call, so the inverter
+  # is only touched when load has actually moved more than the Load
+  # Change Threshold. On a steady load this evaluates and exits without
+  # calling SEMS at all.
+  trigger:
+    - platform: time_pattern
+      seconds: "/20"
+      id: sensor_change
+  condition:
+    - condition: state
+      entity_id: switch.sems_curtailment_load_tracking
+      state: "on"
+    - condition: state
+      entity_id: switch.sems_curtailment_curtailment_active
+      state: "on"
+    - condition: template
+      value_template: >
+        {{ states(states('text.amber_smart_shift_power_load_sensor')) not in ['unknown', 'unavailable'] }}
+    - condition: template
+      value_template: >
+        {{ states(states('text.amber_smart_shift_power_battery_sensor')) not in ['unknown', 'unavailable'] }}
+    - condition: template
+      value_template: "{{ states('sensor.amber_smart_shift_buy_price') | float(0) >= 0 }}"
+    - condition: template
+      value_template: "{{ states('sensor.amber_smart_shift_sell_price') | float(0) < 0 }}"
+  action:
+    - variables:
+        inverter_capacity_w:  "{{ states('number.sems_curtailment_inverter_capacity') | float(10000) }}"
+        current_limit:        "{{ states('number.sems_curtailment_current_power_limit') | int(100) }}"
+        threshold_w:          "{{ states('number.sems_curtailment_load_change_threshold') | float(500) }}"
+        max_battery_charge_w: "{{ states('number.sems_curtailment_battery_max_charge_rate') | float(4640) }}"
+        floor_pct:            "{{ ((max_battery_charge_w / inverter_capacity_w) * 100) | round(0) | int }}"
+        full_soc_threshold:   "{{ states('number.sems_curtailment_full_soc_threshold') | float(98) }}"
+        batt_lvl_override:    "{{ states('text.amber_smart_shift_power_battery_level_sensor') }}"
+        soc: >
+          {% if batt_lvl_override not in ['', 'unknown', 'unavailable', none] %}
+          {{ states(batt_lvl_override) | float(0) }}
+          {% else %}
+          {{ states('sensor.amber_smart_shift_battery_level') | float(0) }}
+          {% endif %}
+        load_w:    "{{ states(states('text.amber_smart_shift_power_load_sensor')) | float(0) }}"
+        battery_w: "{{ states(states('text.amber_smart_shift_power_battery_sensor')) | float(0) }}"
+        battery_charge_w: "{{ battery_w | abs if battery_w < 0 else 0 }}"
+        target_limit: >
+          {% if soc >= full_soc_threshold %}
+          {{ [[((load_w / inverter_capacity_w) * 100) | round(0) | int, 1] | max, 100] | min }}
+          {% elif soc >= 95 %}
+          {% set calculated = (((load_w + battery_charge_w) / inverter_capacity_w) * 100) | round(0) | int %}
+          {{ [[([calculated, floor_pct] | max), 1] | max, 100] | min }}
+          {% else %}
+          {% set calculated = (((load_w + max_battery_charge_w) / inverter_capacity_w) * 100) | round(0) | int %}
+          {{ [[([calculated, floor_pct] | max), 1] | max, 100] | min }}
+          {% endif %}
+        current_limit_w: "{{ (current_limit / 100) * inverter_capacity_w }}"
+        target_w: >
+          {% if soc >= full_soc_threshold %}
+          {{ load_w }}
+          {% else %}
+          {{ [load_w + battery_charge_w, max_battery_charge_w] | max }}
+          {% endif %}
+    - condition: template
+      value_template: "{{ (target_w - current_limit_w) | abs > threshold_w }}"
+    - action: sems_curtailment.set_power_limit
+      data:
+        limit: "{{ target_limit }}"
+      response_variable: cmd_result
+    - if:
+        - condition: template
+          value_template: "{{ cmd_result.success }}"
+      then:
+        - service: number.set_value
+          target:
+            entity_id: number.sems_curtailment_current_power_limit
+          data:
+            value: "{{ target_limit }}"
+      else:
+        - service: notify.notification
+          data:
+            title: "SEMS Load Tracking Failed"
+            message: >
+              Failed to update inverter to {{ target_limit }}%.
+              SOC: {{ soc }}%, Load: {{ load_w }}W, Battery: {{ battery_charge_w }}W,
+              Floor: {{ floor_pct }}%, Target: {{ target_limit }}%.
+              {{ cmd_result.message }}

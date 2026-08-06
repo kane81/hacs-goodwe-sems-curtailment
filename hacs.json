@@ -1,0 +1,17 @@
+{
+  "name": "Home Assistant GoodWe SEMS Curtailment",
+  "render_readme": false,
+  "domains": [
+    "automation",
+    "switch",
+    "number",
+    "sensor",
+    "button",
+    "shell_command",
+    "notify"
+  ],
+  "homeassistant": "2024.1.0",
+  "country": [
+    "AU"
+  ]
+}
