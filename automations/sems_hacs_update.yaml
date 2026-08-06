@@ -5,7 +5,8 @@
 #   Runs install.sh on HA startup (sync mode) and after HACS updates (full mode).
 #
 #   Startup (sync mode): quickly copies files only.
-#   HACS update (full mode): full install.
+#   HACS update (full mode): full install. Silent on success; only notifies
+#   if it fails.
 #
 #-------------------------------------------------------------------------------
 # Change Log
@@ -14,6 +15,9 @@
 #   v1.1    2026-04-23    Kane Li    - Fixed trigger: HACS 2.0 removed hacs/* events
 #   v1.2    2026-04-23    Kane Li    - Added startup trigger as reliable fallback
 #   v1.3    2026-04-23    Kane Li    - Split into sync (startup) and full (update) modes
+#   v1.4    2026-08-06    Kane Li    - Removed the "update in progress" notification
+#                                      that fired on every normal HACS update; now
+#                                      silent unless install.sh actually fails
 ################################################################################
 
 - id: sems_hacs_auto_install
@@ -42,23 +46,29 @@
               data:
                 mode: sync
               response_variable: result
-        # HACS update — full mode. Notification is sent BEFORE running the
-        # installer: full mode auto-restarts Home Assistant at the end (on
-        # HAOS/Supervised), so anything after the shell command races the
-        # shutdown and may never be delivered.
+        # HACS update — full mode. Silent on success (that's the normal
+        # case, and the whole point of this automation is to not need
+        # watching). Only notifies if install.sh actually fails - safe to
+        # check that AFTER the shell command returns, since install.sh
+        # runs under `set -e` and only reaches its `ha core restart` line
+        # on a clean run: a non-zero returncode here means the restart
+        # never happened, so there's no race with it to worry about.
         - conditions:
             - condition: trigger
               id: hacs_update
           sequence:
-            - service: notify.notification
-              data:
-                title: "SEMS Integration Updated"
-                message: >
-                  HACS update detected - running the install script now.
-                  Home Assistant will restart automatically to apply it
-                  (on HA OS/Supervised; container installs need a manual
-                  restart). If entities look stale afterwards, run
-                  bash /config/custom_components/sems_curtailment/install.sh
-                  by hand and check its output.
             - service: shell_command.sems_hacs_install
               response_variable: result
+            - if:
+                - condition: template
+                  value_template: "{{ result.returncode != 0 }}"
+              then:
+                - service: notify.notification
+                  data:
+                    title: "SEMS Integration Update Failed"
+                    message: >
+                      install.sh failed after a HACS update (exit code
+                      {{ result.returncode }}). Home Assistant was NOT
+                      restarted automatically. Run
+                      bash /config/custom_components/sems_curtailment/install.sh
+                      by hand to see the full output and fix it.
