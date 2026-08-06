@@ -140,16 +140,11 @@ views:
               {%- set hh = total_seconds // 3600 -%}
               {%- set mm = (total_seconds % 3600) // 60 -%}
               {%- if hh > 0 -%}
-                {%- set hh_text = (hh | string) ~ ' hour' ~ ('s' if hh != 1 else '') -%}
-                {%- if mm > 0 -%}
-                  {{ hh_text }} {{ mm }} minute{{ 's' if mm != 1 else '' }}
-                {%- else -%}
-                  {{ hh_text }}
-                {%- endif -%}
+                {{ hh }}h {{ mm }}m
               {%- elif total_seconds >= 60 -%}
-                {{ mm }} minute{{ 's' if mm != 1 else '' }}
+                {{ mm }}m
               {%- else -%}
-                less than a minute
+                <1m
               {%- endif -%}
               {%- endmacro -%}
 
@@ -180,7 +175,7 @@ views:
                     {%- set remaining_wh = battery_capacity_wh * (100 - power_soc) / 100 -%}
                     {%- set eta_seconds = (remaining_wh / charge_rate_w * 3600) | int -%}
                     {%- set eta_unix = as_timestamp(now()) + eta_seconds -%}
-                    {%- set power.items = power.items + ['&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;full in ' ~ fmt_duration(eta_seconds) ~ ' — approx ' ~ (eta_unix | timestamp_custom('%I:%M %p'))] -%}
+                    {%- set power.items = power.items + ['&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;full in ' ~ fmt_duration(eta_seconds) ~ ' — approx ' ~ (eta_unix | timestamp_custom('%-I:%M%p') | lower)] -%}
                   {%- endif -%}
                 {%- elif battery_w > 0 -%}
                   {%- set power.items = power.items + ['&nbsp;&nbsp;🔋 Battery — Discharging **' ~ fmt(battery_w) ~ '** - ' ~ (power_soc | round(0) | int) ~ '%'] -%}
@@ -212,18 +207,18 @@ views:
               {%- if not sr.any_enabled -%}
                 {%- set auto.items = auto.items + ['&nbsp;&nbsp;🚫 Auto Sell'] -%}
               {%- elif sell_active -%}
-                {%- set auto.items = auto.items + ['&nbsp;&nbsp;🟢 Auto Sell — Battery > ' ~ (sr.batt | round(0) | int) ~ '%, selling at ' ~ price(sell)] -%}
+                {%- set auto.items = auto.items + ['&nbsp;&nbsp;🟢 Auto Sell — 🔋> ' ~ (sr.batt | round(0) | int) ~ '% sell at ' ~ price(sell)] -%}
               {%- elif sell_selected -%}
-                {%- set auto.items = auto.items + ['&nbsp;&nbsp;🔴 Auto Sell — Battery > ' ~ (sr.batt | round(0) | int) ~ '%, selling when price >= ' ~ price(sr.price)] -%}
+                {%- set auto.items = auto.items + ['&nbsp;&nbsp;🔴 Auto Sell — 🔋> ' ~ (sr.batt | round(0) | int) ~ '% sell price >= ' ~ price(sr.price)] -%}
               {%- else -%}
                 {%- set auto.items = auto.items + ['&nbsp;&nbsp;🔴 Auto Sell'] -%}
               {%- endif -%}
               {%- if not br.any_enabled -%}
                 {%- set auto.items = auto.items + ['&nbsp;&nbsp;🚫 Auto Buy'] -%}
               {%- elif buy_active -%}
-                {%- set auto.items = auto.items + ['&nbsp;&nbsp;🟢 Auto Buy — Battery < ' ~ (br.batt | round(0) | int) ~ '%, buying at ' ~ price(buy)] -%}
+                {%- set auto.items = auto.items + ['&nbsp;&nbsp;🟢 Auto Buy — 🔋< ' ~ (br.batt | round(0) | int) ~ '% buy at ' ~ price(buy)] -%}
               {%- elif buy_selected -%}
-                {%- set auto.items = auto.items + ['&nbsp;&nbsp;🔴 Auto Buy — Battery < ' ~ (br.batt | round(0) | int) ~ '%, buying when price <= ' ~ price(br.price)] -%}
+                {%- set auto.items = auto.items + ['&nbsp;&nbsp;🔴 Auto Buy — 🔋< ' ~ (br.batt | round(0) | int) ~ '% buy price <= ' ~ price(br.price)] -%}
               {%- else -%}
                 {%- set auto.items = auto.items + ['&nbsp;&nbsp;🔴 Auto Buy'] -%}
               {%- endif -%}
