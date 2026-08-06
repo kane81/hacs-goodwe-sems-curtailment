@@ -20,7 +20,7 @@ views:
       # no gap possible:
       #
       #   position 1  Status  -> left   (also holds Manual Controls)
-      #   position 2  Automations -> right (also holds all rules + SEMS sizing)
+      #   position 2  Automations -> right (also holds all rules)
       #
       # Sub-groupings inside each are heading cards, not separate sections.
       # -----------------------------------------------------------------
@@ -89,16 +89,15 @@ views:
               {% set active_ss_off = en_ss_off and not ss_on and manual == 'none' %}
 
               {# SEMS curtailment state #}
-              {% set en_auto = is_state('switch.sems_curtailment_automatic_curtailment', 'on') %}
               {% set curtailment_active = is_state('switch.sems_curtailment_curtailment_active', 'on') %}
-              {% set en_load_tracking = is_state('switch.sems_curtailment_load_tracking', 'on') %}
               {% set current_limit = states('number.sems_curtailment_current_power_limit') | int(100) %}
+              {% set en_auto = is_state('switch.sems_curtailment_automatic_curtailment', 'on') %}
+              {% set en_load_tracking = is_state('switch.sems_curtailment_load_tracking', 'on') %}
               {% set threshold_w = states('number.sems_curtailment_load_change_threshold') | float(500) %}
 
               {%- set amber_text -%}
               **💲 Amber**
               &nbsp;&nbsp;Buy **{{ price(buy) }}** &nbsp;&nbsp; Sell **{{ price(sell) }}** &nbsp;&nbsp; Battery **{{ '⚠️ offline' if not online else (soc | round(0) | int ~ '%') }}**
-              &nbsp;&nbsp;{{ '⚠️ Curtailment **ACTIVE** — Solar at **' ~ current_limit ~ '%**' if curtailment_active else '☀️ Curtailment **OFF** — Solar at **100%**' }}
               &nbsp;&nbsp;Import **${{ '%.2f' | format(states(P ~ 'current_import_cost') | float(0) / 100) }}** &nbsp;&nbsp; Export **${{ '%.2f' | format((states(P ~ 'current_export_earnings') | float(0) / 100) | abs) }}** &nbsp;&nbsp; 💸 Expense **${{ '%.2f' | format((net / 100) | abs) }}**
               &nbsp;&nbsp;Last price poll **{{ polled if polled in ['unknown','unavailable'] else (polled | as_timestamp | timestamp_custom('%I:%M %p')) }}**
               {%- endset -%}
@@ -174,15 +173,15 @@ views:
                   {%- set power_soc = soc -%}
                 {%- endif -%}
                 {%- if battery_w < 0 -%}
-                  {%- set charge_line = '&nbsp;&nbsp;🔋 Battery — Charging **' ~ fmt(battery_w) ~ '** - ' ~ (power_soc | round(0) | int) ~ '%' -%}
+                  {%- set power.items = power.items + ['&nbsp;&nbsp;🔋 Battery — Charging **' ~ fmt(battery_w) ~ '** - ' ~ (power_soc | round(0) | int) ~ '%'] -%}
                   {%- set battery_capacity_wh = states('sensor.amber_smart_shift_battery_capacity') | float(0) -%}
                   {%- set charge_rate_w = battery_w | abs -%}
                   {%- if battery_capacity_wh > 0 and charge_rate_w > 10 and power_soc < 100 -%}
                     {%- set remaining_wh = battery_capacity_wh * (100 - power_soc) / 100 -%}
                     {%- set eta_seconds = (remaining_wh / charge_rate_w * 3600) | int -%}
-                    {%- set charge_line = charge_line ~ ' - full in ' ~ fmt_duration(eta_seconds) -%}
+                    {%- set eta_unix = as_timestamp(now()) + eta_seconds -%}
+                    {%- set power.items = power.items + ['&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;full in ' ~ fmt_duration(eta_seconds) ~ ' — approx ' ~ (eta_unix | timestamp_custom('%I:%M %p'))] -%}
                   {%- endif -%}
-                  {%- set power.items = power.items + [charge_line] -%}
                 {%- elif battery_w > 0 -%}
                   {%- set power.items = power.items + ['&nbsp;&nbsp;🔋 Battery — Discharging **' ~ fmt(battery_w) ~ '** - ' ~ (power_soc | round(0) | int) ~ '%'] -%}
                 {%- else -%}
@@ -191,6 +190,9 @@ views:
               {%- endif -%}
               {%- if has_solar -%}
                 {%- set power.items = power.items + ['&nbsp;&nbsp;☀️ Solar **' ~ fmt(states(solar_id) | float(0)) ~ '**'] -%}
+                {%- if curtailment_active -%}
+                  {%- set power.items = power.items + ['&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Curtailing — Solar at ' ~ current_limit ~ '%'] -%}
+                {%- endif -%}
               {%- endif -%}
               {%- if has_load -%}
                 {%- set power.items = power.items + ['&nbsp;&nbsp;🏠 Load **' ~ fmt(states(load_id) | float(0)) ~ '**'] -%}
@@ -239,19 +241,20 @@ views:
                 {%- endif -%}
                 {%- set auto.items = auto.items + ['&nbsp;&nbsp;' ~ action_icon ~ ' ' ~ action_label ~ remaining_text.value] -%}
               {%- endif -%}
-              {# SEMS curtailment — always one line; Load Tracking only shown
-                 when Automatic Curtailment is on and load tracking is enabled #}
+              {# SEMS — Automatic Curtailment always one line; Load Tracking
+                 only shown when Automatic Curtailment is on and load tracking
+                 is enabled #}
               {%- if en_auto -%}
                 {%- if curtailment_active -%}
-                  {%- set auto.items = auto.items + ['&nbsp;&nbsp;🟢 Automatic Curtailment — Buy ' ~ price(buy) ~ ' · Sell ' ~ price(sell)] -%}
+                  {%- set auto.items = auto.items + ['&nbsp;&nbsp;🟢 Automatic Curtailment'] -%}
                 {%- else -%}
-                  {%- set auto.items = auto.items + ['&nbsp;&nbsp;🔴 Automatic Curtailment — Buy ' ~ price(buy) ~ ' · Sell ' ~ price(sell)] -%}
+                  {%- set auto.items = auto.items + ['&nbsp;&nbsp;🔴 Automatic Curtailment'] -%}
                 {%- endif -%}
                 {%- if en_load_tracking -%}
                   {%- set auto.items = auto.items + ['&nbsp;&nbsp;🟢 SEMS Load Realtime Adj — Threshold ' ~ (threshold_w | int) ~ 'W'] -%}
                 {%- endif -%}
               {%- else -%}
-                {%- set auto.items = auto.items + ['&nbsp;&nbsp;🔴 Automatic Curtailment'] -%}
+                {%- set auto.items = auto.items + ['&nbsp;&nbsp;🚫 Automatic Curtailment'] -%}
               {%- endif -%}
 
               {%- set sections = namespace(parts=[amber_text]) -%}
@@ -415,35 +418,3 @@ views:
           - type: tile
             entity: number.amber_smart_shift_buy_rule_3_max_price
             name: Max Buy Price
-
-          - type: heading
-            heading: SEMS Curtailment
-            heading_style: subtitle
-
-          - type: tile
-            entity: switch.sems_curtailment_load_tracking
-            name: Load Tracking
-            grid_options:
-              columns: full
-
-          - type: tile
-            entity: number.sems_curtailment_load_change_threshold
-            name: Load Change Threshold
-            grid_options:
-              columns: full
-
-          - type: tile
-            entity: number.sems_curtailment_full_soc_threshold
-            name: Full SOC Threshold
-
-          - type: tile
-            entity: number.sems_curtailment_inverter_capacity
-            name: Inverter Capacity
-
-          - type: tile
-            entity: number.sems_curtailment_battery_max_charge_rate
-            name: Battery Max Charge Rate
-
-          - type: tile
-            entity: sensor.amber_smart_shift_battery_capacity
-            name: Battery Capacity
