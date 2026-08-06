@@ -4,12 +4,14 @@
 # =============================================================================
 #
 # HACS only removes the custom_components folder when you uninstall.
-# Run this script to fully remove all integration files and helpers.
+# Run this script first to remove everything install.sh copied elsewhere.
 #
 # Usage:
 #   bash /config/custom_components/sems_curtailment/uninstall.sh
 #
-# After running, restart HA to apply changes.
+# After running: remove the integration under Settings → Devices & Services
+# (this removes the config entry along with every switch/number entity it
+# created), then remove the HACS repository and restart HA.
 # =============================================================================
 
 echo "============================================="
@@ -17,8 +19,8 @@ echo " Home Assistant GoodWe SEMS Curtailment"
 echo " Uninstall Script"
 echo "============================================="
 echo ""
-echo "⚠️  This will remove all SEMS integration files."
-echo "    Your secrets.yaml credentials will NOT be removed."
+echo "⚠️  This will remove all SEMS automations, the package, the reference"
+echo "    script, and (if you confirm) the dashboard."
 echo ""
 read -r -p "Are you sure you want to uninstall? (y/N): " confirm
 if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
@@ -29,7 +31,10 @@ fi
 echo ""
 echo "🗑️  Removing automations..."
 for f in \
-    sems_power_limit \
+    sems_curtailment \
+    sems_curtailment_enable \
+    sems_curtailment_disable \
+    sems_curtailment_manual \
     sems_load_tracking \
     sems_amber_dependency_check \
     sems_hacs_update; do
@@ -48,13 +53,16 @@ fi
 
 echo ""
 echo "🗑️  Removing scripts..."
-if [ -f "/config/scripts/sems_power.py" ]; then
-    rm /config/scripts/sems_power.py
-    echo "   ✅ Removed: /config/scripts/sems_power.py"
-fi
+for f in sems_cli.py sems_power.py; do
+    # sems_power.py is a legacy artefact - only present on older installs
+    if [ -f "/config/scripts/$f" ]; then
+        rm "/config/scripts/$f"
+        echo "   ✅ Removed: /config/scripts/$f"
+    fi
+done
 
 echo ""
-echo "🗑️  Removing templates..."
+echo "🗑️  Removing legacy template files (older installs only)..."
 for f in solar.yaml battery.yaml; do
     if [ -f "/config/templates/$f" ]; then
         rm "/config/templates/$f"
@@ -63,12 +71,30 @@ for f in solar.yaml battery.yaml; do
 done
 
 echo ""
+echo "🗑️  Dashboard"
+if [ -f "/config/lovelace/sems.yaml" ]; then
+    read -r -p "   Remove the SEMS dashboard file too? (y/N): " remove_dash
+    if [[ "$remove_dash" =~ ^[Yy]$ ]]; then
+        rm /config/lovelace/sems.yaml
+        echo "   ✅ Removed: /config/lovelace/sems.yaml"
+        echo "   ℹ️  The lovelace-sems entry in configuration.yaml is left in place -"
+        echo "      remove it by hand if you want the sidebar entry gone too."
+    else
+        echo "   Skipped."
+    fi
+else
+    echo "   None found."
+fi
+
+echo ""
 echo "============================================="
 echo " ✅ Uninstall complete!"
 echo ""
 echo " Next steps:"
-echo "  1. Remove HACS integration: HACS → Integrations → SEMS → Remove"
-echo "  2. Restart HA: Settings → System → Restart"
-echo "  3. Optionally remove credentials from /config/secrets.yaml:"
-echo "     sems_email, sems_password, sems_inverter_sn"
+echo "  1. Remove the integration: Settings → Devices & Services →"
+echo "     GoodWe SEMS Curtailment → ⋮ → Delete. This also deletes every"
+echo "     switch/number entity it created and your stored SEMS login -"
+echo "     nothing is left in secrets.yaml to clean up."
+echo "  2. Remove the HACS repository: HACS → Integrations → SEMS → Remove"
+echo "  3. Restart HA: Settings → System → Restart"
 echo "============================================="

@@ -1,0 +1,216 @@
+################################################################################
+# SEMS Solar Curtailment based on Amber Price
+################################################################################
+#
+#   Sets the GoodWe inverter output limit based on Amber buy/sell prices.
+#   Only calls the SEMS API if the target limit has changed from the current
+#   stored value, avoiding unnecessary API calls every 5 minutes.
+#
+#   Runs all day, every day - no fixed time window. Reads price from the
+#   baseline Amber integration, reads sizing from this integration's own
+#   number entities, and calls this integration's set_power_limit service
+#   rather than a shell_command/script.
+#
+# How it works:
+#   Amber price sensor updates (or a 5 minute safety poll)
+#       ↓
+#   Automatic Curtailment on? (switch.sems_curtailment_automatic_curtailment)
+#       ↓ No  → do nothing (safe exit - no API calls made)
+#       ↓ Yes
+#   Buy price negative  → set inverter to 0%
+#   Sell price negative → curtail based on SOC
+#       SOC < 95%              → target = max(load + battery charge rate, max charge floor)
+#       95% <= SOC < full_soc% → target = max(load + battery charge rate, floor)
+#       SOC >= Full SOC Threshold → target = load only (battery considered full)
+#   Prices positive     → set inverter to 100%
+#       ↓
+#   Only calls the SEMS API if the limit has changed from the stored value
+#
+# Enable / Disable:
+#   Controlled by switch.sems_curtailment_automatic_curtailment (default
+#   OFF). Checked as a condition inside the automation so the OFF state
+#   survives HA restarts.
+#
+#   Turning Automatic Curtailment OFF resets the inverter to 100% and
+#   clears Curtailment Active - see sems_curtailment_disable.yaml.
+#   Turning it ON immediately recalculates instead of waiting for the next
+#   Amber poll - see sems_curtailment_enable.yaml.
+#
+#   To curtail without the automatic price logic, leave this OFF and toggle
+#   switch.sems_curtailment_curtailment_active directly - see
+#   sems_curtailment_manual.yaml.
+#
+# Price Variables:
+#   sensor.amber_smart_shift_buy_price   - buy price $/kWh
+#   sensor.amber_smart_shift_sell_price  - sell price $/kWh
+#
+#-------------------------------------------------------------------------------
+# Dependencies
+#-------------------------------------------------------------------------------
+#   → sensor.amber_smart_shift_buy_price
+#   → sensor.amber_smart_shift_sell_price
+#   → sensor.amber_smart_shift_battery_level  (default SOC when no override set)
+#   → text.amber_smart_shift_power_battery_sensor
+#   → text.amber_smart_shift_power_battery_level_sensor  (optional override)
+#   → text.amber_smart_shift_power_load_sensor
+#   → number.sems_curtailment_inverter_capacity
+#   → number.sems_curtailment_battery_max_charge_rate
+#   → number.sems_curtailment_full_soc_threshold
+#   → number.sems_curtailment_current_power_limit
+#   → switch.sems_curtailment_automatic_curtailment
+#   → switch.sems_curtailment_curtailment_active
+#   → sems_curtailment.set_power_limit  (service)
+#   → notify.notification  (configured in configuration_example.yaml)
+################################################################################
+
+- id: sems_curtailment
+  alias: SEMS Solar Curtailment based on Amber Price
+  trace:
+    stored_traces: 20
+  description: >
+    Sets the inverter power limit based on Amber buy/sell prices, all day,
+    with no fixed time window. Only calls the SEMS API if the target limit
+    has changed. Controlled by switch.sems_curtailment_automatic_curtailment
+    (default OFF).
+  trigger:
+    - platform: state
+      entity_id: sensor.amber_smart_shift_buy_price
+      id: price_change
+    - platform: state
+      entity_id: sensor.amber_smart_shift_sell_price
+      id: price_change
+    - platform: time_pattern
+      minutes: "/5"
+      id: price_change
+  condition:
+    - condition: state
+      entity_id: switch.sems_curtailment_automatic_curtailment
+      state: "on"
+    - condition: template
+      value_template: "{{ states('sensor.amber_smart_shift_buy_price') not in ['unknown', 'unavailable'] }}"
+    - condition: template
+      value_template: "{{ states('sensor.amber_smart_shift_sell_price') not in ['unknown', 'unavailable'] }}"
+  action:
+    - variables:
+        buy_price:  "{{ states('sensor.amber_smart_shift_buy_price')  | float(0) }}"
+        sell_price: "{{ states('sensor.amber_smart_shift_sell_price') | float(0) }}"
+        inverter_capacity_w:  "{{ states('number.sems_curtailment_inverter_capacity') | float(10000) }}"
+        current_limit:         "{{ states('number.sems_curtailment_current_power_limit') | int(100) }}"
+        max_battery_charge_w:  "{{ states('number.sems_curtailment_battery_max_charge_rate') | float(4640) }}"
+        floor_pct:             "{{ ((max_battery_charge_w / inverter_capacity_w) * 100) | round(0) | int }}"
+        full_soc_threshold:    "{{ states('number.sems_curtailment_full_soc_threshold') | float(98) }}"
+        batt_lvl_override:     "{{ states('text.amber_smart_shift_power_battery_level_sensor') }}"
+        soc: >
+          {% if batt_lvl_override not in ['', 'unknown', 'unavailable', none] %}
+          {{ states(batt_lvl_override) | float(0) }}
+          {% else %}
+          {{ states('sensor.amber_smart_shift_battery_level') | float(0) }}
+          {% endif %}
+        load_w: "{{ states(states('text.amber_smart_shift_power_load_sensor')) | float(0) }}"
+        battery_w: "{{ states(states('text.amber_smart_shift_power_battery_sensor')) | float(0) }}"
+        battery_charge_w: "{{ battery_w | abs if battery_w < 0 else 0 }}"
+    - choose:
+        # Buy price negative - stop all solar output
+        - conditions:
+            - condition: template
+              value_template: "{{ buy_price < 0 }}"
+          sequence:
+            - service: switch.turn_on
+              target:
+                entity_id: switch.sems_curtailment_curtailment_active
+            - if:
+                - condition: template
+                  value_template: "{{ current_limit != 0 }}"
+              then:
+                - action: sems_curtailment.set_power_limit
+                  data:
+                    limit: 0
+                  response_variable: cmd_result
+                - if:
+                    - condition: template
+                      value_template: "{{ cmd_result.success }}"
+                  then:
+                    - service: number.set_value
+                      target:
+                        entity_id: number.sems_curtailment_current_power_limit
+                      data:
+                        value: 0
+                  else:
+                    - service: notify.notification
+                      data:
+                        title: "SEMS Solar Curtailment Failed"
+                        message: "Failed to set inverter to 0% — buy price is negative. {{ cmd_result.message }}"
+
+        # Sell price negative - curtail based on SOC
+        - conditions:
+            - condition: template
+              value_template: "{{ sell_price < 0 }}"
+          sequence:
+            - service: switch.turn_on
+              target:
+                entity_id: switch.sems_curtailment_curtailment_active
+            - variables:
+                target_limit: >
+                  {% if soc >= full_soc_threshold %}
+                  {{ [[((load_w / inverter_capacity_w) * 100) | round(0) | int, 1] | max, 100] | min }}
+                  {% elif soc >= 95 %}
+                  {% set calculated = (((load_w + battery_charge_w) / inverter_capacity_w) * 100) | round(0) | int %}
+                  {{ [[([calculated, floor_pct] | max), 1] | max, 100] | min }}
+                  {% else %}
+                  {% set calculated = (((load_w + max_battery_charge_w) / inverter_capacity_w) * 100) | round(0) | int %}
+                  {{ [[([calculated, floor_pct] | max), 1] | max, 100] | min }}
+                  {% endif %}
+            - if:
+                - condition: template
+                  value_template: "{{ current_limit != target_limit }}"
+              then:
+                - action: sems_curtailment.set_power_limit
+                  data:
+                    limit: "{{ target_limit }}"
+                  response_variable: cmd_result
+                - if:
+                    - condition: template
+                      value_template: "{{ cmd_result.success }}"
+                  then:
+                    - service: number.set_value
+                      target:
+                        entity_id: number.sems_curtailment_current_power_limit
+                      data:
+                        value: "{{ target_limit }}"
+                  else:
+                    - service: notify.notification
+                      data:
+                        title: "SEMS Solar Curtailment Failed"
+                        message: >
+                          Failed to set inverter — sell price negative.
+                          SOC: {{ soc }}%, Load: {{ load_w }}W, Battery: {{ battery_charge_w }}W,
+                          Floor: {{ floor_pct }}%, Target: {{ target_limit }}%.
+                          {{ cmd_result.message }}
+
+      default:
+        # Prices positive - restore inverter to 100%
+        - service: switch.turn_off
+          target:
+            entity_id: switch.sems_curtailment_curtailment_active
+        - if:
+            - condition: template
+              value_template: "{{ current_limit != 100 }}"
+          then:
+            - action: sems_curtailment.set_power_limit
+              data:
+                limit: 100
+              response_variable: cmd_result
+            - if:
+                - condition: template
+                  value_template: "{{ cmd_result.success }}"
+              then:
+                - service: number.set_value
+                  target:
+                    entity_id: number.sems_curtailment_current_power_limit
+                  data:
+                    value: 100
+              else:
+                - service: notify.notification
+                  data:
+                    title: "SEMS Solar Curtailment Failed"
+                    message: "Failed to reset inverter to 100%. {{ cmd_result.message }}"

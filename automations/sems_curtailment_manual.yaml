@@ -1,0 +1,127 @@
+################################################################################
+# SEMS Curtailment Manual Toggle
+################################################################################
+#
+#   Lets you drive Curtailment Active by hand when Automatic Curtailment is
+#   OFF. Turning Curtailment Active ON calculates a target using the same
+#   SOC-based logic as the automatic mode and applies it; turning it OFF
+#   restores the inverter to 100%.
+#
+#   Only acts while Automatic Curtailment is off, so it never fights with
+#   sems_curtailment.yaml, which owns Curtailment Active whenever Automatic
+#   Curtailment is on.
+#
+################################################################################
+
+- id: sems_curtailment_manual
+  alias: SEMS Curtailment Manual Toggle
+  trace:
+    stored_traces: 10
+  description: >
+    Applies or clears curtailment when Curtailment Active is toggled by
+    hand while Automatic Curtailment is off.
+  # Explicit to:/not_from: rather than a bare state trigger. A bare
+  # trigger also fires on the unknown -> off transition as the switch
+  # restores at startup, which would send a spurious "restore to 100%"
+  # command on every Home Assistant restart.
+  trigger:
+    - platform: state
+      entity_id: switch.sems_curtailment_curtailment_active
+      to: "on"
+      not_from:
+        - unknown
+        - unavailable
+    - platform: state
+      entity_id: switch.sems_curtailment_curtailment_active
+      to: "off"
+      not_from:
+        - unknown
+        - unavailable
+  condition:
+    - condition: state
+      entity_id: switch.sems_curtailment_automatic_curtailment
+      state: "off"
+  action:
+    - variables:
+        active: "{{ is_state('switch.sems_curtailment_curtailment_active', 'on') }}"
+        inverter_capacity_w:  "{{ states('number.sems_curtailment_inverter_capacity') | float(10000) }}"
+        current_limit:        "{{ states('number.sems_curtailment_current_power_limit') | int(100) }}"
+        max_battery_charge_w: "{{ states('number.sems_curtailment_battery_max_charge_rate') | float(4640) }}"
+        floor_pct:            "{{ ((max_battery_charge_w / inverter_capacity_w) * 100) | round(0) | int }}"
+        full_soc_threshold:   "{{ states('number.sems_curtailment_full_soc_threshold') | float(98) }}"
+        batt_lvl_override:    "{{ states('text.amber_smart_shift_power_battery_level_sensor') }}"
+        soc: >
+          {% if batt_lvl_override not in ['', 'unknown', 'unavailable', none] %}
+          {{ states(batt_lvl_override) | float(0) }}
+          {% else %}
+          {{ states('sensor.amber_smart_shift_battery_level') | float(0) }}
+          {% endif %}
+        load_w: "{{ states(states('text.amber_smart_shift_power_load_sensor')) | float(0) }}"
+        battery_w: "{{ states(states('text.amber_smart_shift_power_battery_sensor')) | float(0) }}"
+        battery_charge_w: "{{ battery_w | abs if battery_w < 0 else 0 }}"
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ active }}"
+          sequence:
+            - variables:
+                target_limit: >
+                  {% if soc >= full_soc_threshold %}
+                  {{ [[((load_w / inverter_capacity_w) * 100) | round(0) | int, 1] | max, 100] | min }}
+                  {% elif soc >= 95 %}
+                  {% set calculated = (((load_w + battery_charge_w) / inverter_capacity_w) * 100) | round(0) | int %}
+                  {{ [[([calculated, floor_pct] | max), 1] | max, 100] | min }}
+                  {% else %}
+                  {% set calculated = (((load_w + max_battery_charge_w) / inverter_capacity_w) * 100) | round(0) | int %}
+                  {{ [[([calculated, floor_pct] | max), 1] | max, 100] | min }}
+                  {% endif %}
+            - if:
+                - condition: template
+                  value_template: "{{ current_limit != target_limit }}"
+              then:
+                - action: sems_curtailment.set_power_limit
+                  data:
+                    limit: "{{ target_limit }}"
+                  response_variable: cmd_result
+                - if:
+                    - condition: template
+                      value_template: "{{ cmd_result.success }}"
+                  then:
+                    - service: number.set_value
+                      target:
+                        entity_id: number.sems_curtailment_current_power_limit
+                      data:
+                        value: "{{ target_limit }}"
+                  else:
+                    - service: notify.notification
+                      data:
+                        title: "SEMS Manual Curtailment Failed"
+                        message: >
+                          Failed to set inverter — Curtailment Active turned on manually.
+                          SOC: {{ soc }}%, Load: {{ load_w }}W, Battery: {{ battery_charge_w }}W,
+                          Floor: {{ floor_pct }}%, Target: {{ target_limit }}%.
+                          {{ cmd_result.message }}
+      default:
+        # Curtailment Active turned off manually - restore 100%
+        - if:
+            - condition: template
+              value_template: "{{ current_limit != 100 }}"
+          then:
+            - action: sems_curtailment.set_power_limit
+              data:
+                limit: 100
+              response_variable: cmd_result
+            - if:
+                - condition: template
+                  value_template: "{{ cmd_result.success }}"
+              then:
+                - service: number.set_value
+                  target:
+                    entity_id: number.sems_curtailment_current_power_limit
+                  data:
+                    value: 100
+              else:
+                - service: notify.notification
+                  data:
+                    title: "SEMS Manual Curtailment Failed"
+                    message: "Failed to reset inverter to 100%. {{ cmd_result.message }}"

@@ -1,355 +1,246 @@
-<table><tr><td><img src="brand/icon.png" width="80"/></td><td><h1>Home Assistant GoodWe SEMS Curtailment</h1></td></tr></table>
+# Home Assistant GoodWe SEMS Curtailment
 
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow?logo=buy-me-a-coffee)](https://www.buymeacoffee.com/kane81)
+Curtail a GoodWe solar inverter from Home Assistant when [Amber Electric](https://www.amber.com.au/) prices go negative — automatic price-driven output limiting, manual curtailment, and direct inverter start/stop.
 
+> **This project uses GoodWe's SEMS Portal API, which is not publicly documented or officially supported.** GoodWe may change or remove it at any time. Use at your own risk.
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-[![GitHub release](https://img.shields.io/github/release/kane81/hacs-goodwe-sems-curtailment.svg)](https://github.com/kane81/hacs-goodwe-sems-curtailment/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![](https://img.shields.io/badge/dynamic/json?color=41BDF5&logo=home-assistant&label=integration%20usage&suffix=%20installs&cacheSeconds=15600&url=https://analytics.home-assistant.io/custom_integrations.json&query=$.sems_curtailment.total)](https://analytics.home-assistant.io)
-
-> A Home Assistant custom integration for **[GoodWe](https://www.goodwe.com/)** solar inverters that controls inverter output via the **[SEMS Portal](https://www.semsportal.com/)** API based on **[Amber Electric](https://www.amber.com.au/)** real-time pricing — automatically curtailing solar export when prices are negative and optimising self-consumption.
+⚡ Requires the companion project [hacs-custom-amber-integration](https://github.com/kane81/hacs-custom-amber-integration) ([releases](https://github.com/kane81/hacs-custom-amber-integration/releases)) installed and signed in first — this project reads its price and battery sensors.
 
 ---
 
-## ⚠️ Requires hacs-custom-amber-integration
+## How It Works
 
-**This integration depends on [hacs-custom-amber-integration](https://github.com/kane81/hacs-custom-amber-integration).** It reads the Amber Electric price helpers populated by that project. Install and configure that project first before proceeding.
-
-> **⚠️ IMPORTANT:** After installing via HACS, open **Advanced SSH & Web Terminal** and run:
-> ```bash
-> bash /config/custom_components/sems_curtailment/install.sh
-> ```
-> This is required to complete setup. Refer to the README installation steps below.
+The integration authenticates with your SEMS Portal email and password, the same credentials used by the SEMS app. When the Amber buy or feed-in price goes negative, the curtailment automation calculates a target output percentage from battery state of charge and house load, and applies it to the inverter. When prices recover, output is restored to 100%. Curtailment runs all day — there is no time window.
 
 ---
 
-## Features
+## What You Get
 
-| Feature | Description |
-|---|---|
-| **Negative buy price curtailment** | Sets inverter to 0% when Amber buy price goes negative — stops solar export to avoid paying to export |
-| **Negative sell price curtailment** | Curtails inverter to match house load + battery charge rate when sell price goes negative |
-| **Real-time load tracking** | Adjusts inverter limit in real-time as house load changes during curtailment |
-| **Window management** | Resets inverter to 100% at window start and end — clean slate every day |
-| **Amber dependency check** | Notifies on startup if hacs-custom-amber-integration is not providing price data |
+### Part 1 — The Integration (required)
 
----
+Switches, sizing controls, diagnostic sensors, and inverter commands, configured entirely through the Home Assistant UI with a SEMS Portal login. The inverter's serial number and rated capacity are discovered automatically; battery capacity is read from the Amber integration.
 
-## ⚠️ Disclaimer
+### Part 2 — Automations and Dashboard (optional)
 
-This project uses the SEMS Portal API which is not publicly documented or officially supported. GoodWe may change or remove it at any time without notice. This project has no affiliation with GoodWe or SEMS. Use at your own risk — changing inverter output limits directly affects your solar system. The author accepts no responsibility for energy costs, equipment damage or system issues.
+The price-driven curtailment automations, plus a dashboard.
 
----
-
-## ⚠️ Prerequisites
-
-- **[hacs-custom-amber-integration](https://github.com/kane81/hacs-custom-amber-integration) installed and working** — prices must be updating before you install this
-- **GoodWe inverter** connected to the SEMS Portal
-- **Home Assistant OS or Supervised** with HACS installed
-
-### Have on hand before starting
-
-**SEMS Account**
-
-| What | Notes |
-|---|---|
-| **SEMS Portal login email** | Your GoodWe SEMS Portal account email |
-| **SEMS Portal password** | Your GoodWe SEMS Portal account password |
-| **Inverter serial number** | Printed on the label on your inverter |
-
-**Battery & Inverter Details**
-
-| What | Notes |
-|---|---|
-| **Solar inverter capacity** | Rated output in watts — e.g. GW10K-MS = **10000W** |
-| **Battery max charge rate** | Maximum charge rate in watts — e.g. AlphaESS Smile5 = **4640W** |
-| **Battery Capacity** | Usable storage in kWh — e.g. AlphaESS Smile5 = **9.6 kWh**. This is used to calculate time-to-full on the dashboard card. |
-
-**Sensor Entity IDs**
-
-These tell the integration which sensors to read from your battery. The integration can function without them but curtailment calculations will be less accurate.
-
-**How to find your sensor Entity IDs:**
-1. Go to **Settings → Devices & Services** → find your battery integration
-2. Click on the entity you want (e.g. Battery SOC)
-3. Click the **⚙️ cog** icon → copy the **Entity ID**
-4. The Entity ID must be the full ID including the domain — e.g. `sensor.al7011025073833_instantaneous_battery_soc`
-
-Alternatively go to **Developer Tools → States** and search for your battery name.
-
-| What | Notes |
-|---|---|
-| **Battery SOC sensor** | State of charge 0–100%. Example: `sensor.al7011025073833_instantaneous_battery_soc` |
-| **Battery I/O Power sensor** | Negative = charging, positive = discharging. Example: `sensor.al7011025073833_instantaneous_battery_i_o` |
-| **House Load sensor** | Current house consumption in watts. Example: `sensor.al7011025073833_instantaneous_load` |
-| **Solar Production sensor** | Current solar generation in watts. Example: `sensor.al7011025073833_instantaneous_generation` |
-| **Grid Power sensor** | Positive = importing, negative = exporting. Example: `sensor.al7011025073833_instantaneous_grid_i_o_total` |
-
-> The example sensor IDs above are from the **[homeassistant-alphaESS](https://github.com/CharlesGillanders/homeassistant-alphaESS)** integration by Charles Gillanders — a great community integration for AlphaESS batteries. Any battery integration that exposes these values as HA sensors will work.
-
-> **No battery sensors installed?** The integration will still work but:
-> - **SEMS Load Tracking Adjustments** will not function (requires a load sensor)
-> - **Curtailment** will read load as 0W, so when curtailment activates it will set the inverter output to near-zero — effectively preventing all export
-> - Setting output to 0% does **not** turn the inverter off — a small amount of power will still leak through. This is intentional, as a fully powered-off inverter takes several minutes to restart and reconnect
-
-The install script will prompt you to enter all of these — just copy and paste.
+|                     | Part 1                            | Part 2                          |
+| ------------------- | ---------------------------------- | -------------------------------- |
+| **What it is**      | A normal HA integration           | Automations + a dashboard file  |
+| **Install via**     | HACS → restart → Add Integration  | One shell command               |
+| **You need**        | SEMS Portal email + password      | Nothing extra                   |
+| **Required?**       | Yes                                | No — Part 1 works standalone    |
 
 ---
 
-## Installation
+## Requirements
 
-### Step 1 — Install Prerequisites
-
-Install **HACS** and **Advanced SSH & Web Terminal** if not already done — see the [hacs-custom-amber-integration README](https://github.com/kane81/hacs-custom-amber-integration#installation) for step-by-step instructions.
-
----
-
-### Step 2 — Install hacs-custom-amber-integration First
-
-This integration requires Amber Electric prices to be available in HA. If you haven't already, install and configure [hacs-custom-amber-integration](https://github.com/kane81/hacs-custom-amber-integration) first and verify prices are updating before continuing.
+- The **[baseline Amber integration](https://github.com/kane81/hacs-custom-amber-integration)** installed and signed in
+- A **GoodWe inverter** registered on the SEMS Portal (au.semsportal.com), with remote control enabled on the account
+- **Home Assistant 2024.1** or newer, with [HACS](https://hacs.xyz/) installed
+- A **terminal client** — Advanced SSH & Web Terminal add-on, or `docker exec` — required for Part 2's `install.sh` and the command-line tool
+- *Optional* — the Amber integration's Power sensors configured, for accurate SOC-based curtailment sizing. See [Power sensors](#power-sensors) in the appendix.
 
 ---
 
-### Step 3 — Install via HACS
+## Part 1 — Install the Integration
 
-1. Open **HACS** in your HA sidebar
-2. Click **⋮** (top right) → **Custom repositories**
-3. Paste: `https://github.com/kane81/hacs-goodwe-sems-curtailment`
-4. Category: **Integration** → **Add**
-5. Search for **hacs-goodwe-sems-curtailment** → **Download**
+### 1. Add the repository to HACS
 
-HACS downloads the integration into `/config/custom_components/sems_curtailment/`.
+**HACS** → **⋮** → **Custom repositories** → paste this repository's URL → Category **Integration** → **Add**.
+
+### 2. Download it, then restart Home Assistant
+
+**HACS** → search *GoodWe SEMS Curtailment* → **Download**, then **Settings → System → Restart**.
+
+### 3. Add the integration
+
+**Settings → Devices & Services → Add Integration** → search *Goodwe* → select **Home Assistant GoodWe SEMS Curtailment**.
+
+If a dialog offers a different integration first, select **Cancel**, search again, and select this one from the results.
+
+### 4. Complete the form
+
+| Field                   | What it is                                          |
+| ----------------------- | ---------------------------------------------------- |
+| SEMS Portal email       | Your `au.semsportal.com` / SEMS app login           |
+| SEMS Portal password    | Your SEMS Portal password                            |
+| Battery max charge rate | e.g. `4640` W for an AlphaESS Smile5                 |
+| Load change threshold   | Minimum watt change before Load Tracking re-adjusts  |
+| Full SOC threshold      | See below                                            |
+
+**Full SOC threshold** — the battery percentage above which the battery is treated as full. As a battery approaches full, its charge rate tapers, so the headroom curtailment reserves for charging shrinks with it. Above this threshold, curtailment targets house load only.
+
+The login is verified against the SEMS Portal before the entry is created. The inverter serial number and rated capacity are then discovered automatically, and battery capacity is read live from `sensor.amber_smart_shift_battery_capacity` — none of these are entered by hand. To update the login or sizing later, open the integration's card and select **Configure**.
 
 ---
 
-### Step 4 — Run the Install Script
+## Part 2 — Automations and Dashboard (optional)
 
-Open **Advanced SSH & Web Terminal** and run:
+Part 1 must be installed and configured first.
 
-```bash
+### Install
+
+From **Advanced SSH & Web Terminal**, or `docker exec -it homeassistant bash`:
+
+```
 bash /config/custom_components/sems_curtailment/install.sh
 ```
-> 💡 **Terminal tip:** To paste into the terminal use **Right Click → Paste**. Do not use Ctrl+V — it will not work in the HA terminal.
 
+The installer copies the automations, helper package, and command-line tool, prompts for automatic or manual dashboard installation, verifies `configuration.yaml`, and restarts Home Assistant (HA OS/Supervised; container installs are told to restart manually). It re-runs automatically after HACS updates.
 
-The script walks you through the following steps:
+**Everything is installed switched off.** The curtailment automations check the Automatic Curtailment switch before acting, and it defaults to off.
 
-**Step 4a — SEMS Credentials**
+### The dashboard
 
-```
-🔑 Checking SEMS credentials in secrets.yaml...
-
-   Enter SEMS Portal login email: you@example.com
-   ✅ sems_email saved
-
-   Enter SEMS Portal password: ••••••••
-   ✅ sems_password saved
-
-   Enter Inverter serial number (on inverter label): ESXXXXXXXX
-   ✅ sems_inverter_sn saved
-```
-
-**Step 4b — HA Token** *(only if not already set by the Amber integration)*
+The status panel reports prices, power flow, and what curtailment is doing:
 
 ```
-🔑 HA Long-Lived Access Token not found in secrets.yaml
-   To get a token: Profile avatar (bottom left) → Long-Lived Access Tokens → Create Token
-
-   Enter your HA Long-Lived Access Token: eyJ...
-   ✅ Token saved to secrets.yaml
+☀️ Curtailment OFF — Solar at 100%
+🟢 Automatic Curtailment
+🟢 SEMS Load Realtime Adj - Threshold 500W
+🟢 Curtailment Active
 ```
 
-**Step 4c — Dashboard**
+🟢 active · 🔴 enabled, waiting · 🚫 disabled · ⚠️ curtailment currently limiting output
+
+**Auto-installed dashboards cannot be edited in the UI.** `install.sh` registers a `mode: yaml` dashboard, which Home Assistant deliberately makes read-only in the frontend. Changes require editing `/config/lovelace/sems.yaml` directly. Re-running `install.sh` overwrites it with the shipped version.
+
+### The switches
+
+**Automatic Curtailment** is the master switch — on, the price-driven logic runs continuously; off, nothing moves and the inverter is restored to 100%. **Curtailment Active** indicates the inverter is currently curtailed; while Automatic Curtailment is off it can be toggled by hand to curtail or restore immediately, using the same SOC-based calculation. **Load Tracking** fine-tunes the limit in real time as load and battery change while curtailment is active.
+
+### Manually adding the dashboard
+
+Building the dashboard manually allows full customisation in the HA Dashboard UI editor. The trade-off is the absence of the live status summary, which relies on a Jinja template the Tile card cannot reproduce.
+
+**Setup:**
+
+1. **Settings → Dashboards → + Add Dashboard** → *New dashboard from scratch* → provide a name
+2. Open it → **Edit Dashboard**
+3. Rename the first section to *Status*. Add a card → **Markdown**, and paste in the content from [`dashboard_card.txt`](custom_components/sems_curtailment/dashboard_card.txt) → **Save**
+
+**Status section — add these as Tile cards, in order:**
+
+| Entity | Tile name | Settings |
+| --- | --- | --- |
+| `switch.sems_curtailment_automatic_curtailment` | Automatic Curtailment | Layout: Full width |
+| `switch.sems_curtailment_curtailment_active` | Curtailment Active | Layout: Full width |
+
+**Controls section — add a second section (same as step 3, without the Markdown card), then add these as Tile cards:**
+
+| Entity | Tile name | Settings |
+| --- | --- | --- |
+| `switch.sems_curtailment_load_tracking` | Load Tracking | Layout: Full width |
+| `number.sems_curtailment_load_change_threshold` | Load Change Threshold | Layout: Full width |
+| `number.sems_curtailment_full_soc_threshold` | Full SOC Threshold | — |
+| `number.sems_curtailment_inverter_capacity` | Inverter Capacity | — |
+| `number.sems_curtailment_battery_max_charge_rate` | Battery Max Charge Rate | — |
+| `sensor.amber_smart_shift_battery_capacity` | Battery Capacity | — |
+
+The four Number/Sensor tiles are left at default width so they sit in pairs; the switches and threshold use Full width. This matches the auto-installed dashboard's layout and naming.
+
+### Command-line tool
+
+`scripts/sems_cli.py` calls the SEMS Portal directly from a terminal — the same API operations the integration uses, without Home Assistant in the loop. Standard library only; runs anywhere with Python 3.9+.
 
 ```
-📊 Dashboard
-   Create SEMS dashboard in sidebar? (Y/n): Y
-   ✅ Dashboard created: /config/lovelace/sems.yaml
+export SEMS_EMAIL="you@example.com"
+export SEMS_PASSWORD="your sems portal password"
+
+python3 sems_cli.py discover     # station + inverter serial, model, capacity
+python3 sems_cli.py stations     # every power station on the account
+python3 sems_cli.py status       # Working / Waiting / Offline, last report
+python3 sems_cli.py detail       # live PV/battery/grid/load snapshot
+python3 sems_cli.py limit 50     # set output limit to 50%
+python3 sems_cli.py stop --yes   # stop the inverter (asks first without --yes)
+python3 sems_cli.py start        # start the inverter
+python3 sems_cli.py raw inverter '{"sn": "..."}'   # dump a raw response
 ```
 
-Answer **Y** to create the **SEMS** dashboard in your sidebar, or **n** to skip and add manually later.
+Optionally `export SEMS_INVERTER_SN="..."` to skip the station lookup on commands that need a serial number. `limit`, `start`, and `stop` change the inverter's actual behaviour; a limit set here may be overwritten by Automatic Curtailment on its next evaluation.
 
-**Step 4d — Battery & Inverter Details**
+### Send Start/Stop Inverter Command
 
-```
-⚙️  Battery & Inverter Details
-   Press Enter to accept the default value shown in brackets.
-
-   Solar inverter capacity (e.g. GW10K-MS = 10000) [10000 W]: 10000
-   ✅ Solar inverter capacity set to 10000 W
-
-   Battery max charge rate (AlphaESS Smile5 = 4640) [3000 W]: 4640
-   ✅ Battery max charge rate set to 4640 W
-
-   Battery Capacity [10 kWh]: 9.6
-   ✅ Battery Capacity set to 9.6 kWh
-
-   Load change threshold (min watts before API call) [500 W]:
-   ✅ Load change threshold set to 500 W
-```
-
-**Step 4e — Battery Sensor Entity IDs**
-
-> 💡 **Finding your Entity IDs:** Go to the entity → click the **⚙️ cog** → copy the **Entity ID**. It must be the full ID including the domain e.g. `sensor.your_entity_name`. You can also find them in **Developer Tools → States**.
-
-```
-🔌 Battery Sensor Entity IDs
-   Find your sensor IDs in Developer Tools → States.
-   Press Enter to skip any and configure later in Overview → Devices → Helpers.
-
-   Battery SOC sensor (0-100%)
-   Example: sensor.al7011025073833_instantaneous_battery_soc
-   Enter entity ID (or press Enter to skip): sensor.al7011025073833_instantaneous_battery_soc
-   ✅ Battery SOC sensor set to sensor.al7011025073833_instantaneous_battery_soc (current value: 68.0)
-```
-
-Repeat for each sensor. After all sensors are entered the script will confirm how many were configured and warn if any are missing.
-
-**Step 4f — Automatic configuration**
-
-The script automatically updates `configuration.yaml`, reloads HA YAML and sets default helper values. No action required — just wait for it to complete.
-
-The output should end with:
-```
-✅ Install complete!
-```
-
-> **After this first run** the `sems_hacs_auto_install` automation handles all future HACS updates automatically.
-
-> **To re-run the full installer** at any time (e.g. to reconfigure sensors or re-add the dashboard):
-> ```bash
-> bash /config/custom_components/sems_curtailment/install.sh
-> ```
-
----
-
-### Step 5 — Dashboard Card
-
-![Dashboard Card](images/dashboard_card.png)
-
-If you opted to install the dashboard during setup, there will be a **SEMS** dashboard in your sidebar. Click on it to see your controls. Click **Poll Amber Prices Now** to load current pricing — data will be at default settings until the first poll runs.
-
-If you did not opt to auto install, see below for manual instructions.
-
----
-
-### Using the Dashboard Card
-
-The SEMS dashboard shows real-time solar, battery, load and grid power alongside Amber pricing, automation status and all configurable controls in one place.
-
-**Icon legend:** 🟢 enabled & active · 🔴 enabled, waiting for conditions · 🚫 disabled
-
-#### Manually Adding the Card
-
-1. Go to **Settings → Dashboards → Add Dashboard** → **New dashboard from scratch** → give it a name
-2. Open it from the sidebar → click **Edit**
-3. Click **+ Add Card** → search for **Markdown**
-4. Copy the card template from [`custom_components/sems_curtailment/dashboard_card.txt`](custom_components/sems_curtailment/dashboard_card.txt) and paste into the Content field
-5. Click **Save**
-
----
-
-### Step 6 — Restart HA
-
-Go to **Settings → System → Restart** to apply all changes. After restart:
-- The **SEMS** dashboard will appear in your sidebar
-- The SEMS automations will load and begin monitoring prices
-
-
-## Manual Commands
-
-```bash
-python3 /config/scripts/sems_power.py 100   # Reset inverter to full output
-python3 /config/scripts/sems_power.py 50    # Set to 50%
-python3 /config/scripts/sems_power.py 0     # Set to 0% (effectively off)
-```
-
----
-
-## Architecture
-
-📐 [Click here to view the Architecture Diagram](images/architecture.png)
-
----
-
-## Uninstalling
-
-Removing this integration via HACS only deletes the `custom_components` folder — automation files, packages, scripts and helpers are left behind. To fully remove everything run the uninstall script first:
-
-```bash
-bash /config/custom_components/sems_curtailment/uninstall.sh
-```
-
-Then remove from HACS and restart HA.
-
-## Controls & Helpers
-
-All controls are available in the **SEMS** dashboard sidebar or via **Overview → Devices → Helpers**.
-
-| Helper | Purpose | Default |
-|---|---|---|
-| `Manual Disable Solar` | Instantly sets inverter to 0% output when ON, restores to 100% when OFF. Independent of the curtailment automation — use for quick manual control or maintenance. | OFF |
-| `Enable Automation: SEMS Solar Curtailment` | Enables price-based solar curtailment | OFF |
-| `Enable Automation: SEMS Load Tracking Adjustments` | Enables real-time load-based inverter adjustments | OFF |
-| `SEMS Curtailment Start` | Start of the curtailment window | 09:00 |
-| `SEMS Curtailment End` | End of the curtailment window | 17:00 |
-| `SEMS Load Change Threshold` | Minimum watt change before triggering an API call | 500W |
-| `SEMS Inverter Capacity` | Rated inverter output in watts | 10000W |
-| `Battery Max Charge Rate` | Maximum battery charge rate in watts | 3000W |
-| `Battery Capacity` | Battery usable capacity in kWh | 10 kWh |
-
-> **Manual Disable Solar** does not turn the inverter off — a small amount of power will still leak through. This is intentional as a fully powered-off inverter takes several minutes to restart.
-
-## Advanced Tuning
-
-### Full SOC Threshold (`SEMS Full SOC Threshold`)
-
-By default the integration treats the battery as full when SOC reaches **98%** — switching curtailment from `load + charge rate` to `load only`. This is needed because battery sensors often report values like 98.8% rather than exactly 100%.
-
-If curtailment is reducing output too early (battery still charging aggressively at 98%), increase the threshold. If it's not reducing at near-full SOC, decrease it.
-
-To adjust: **Overview → Devices → Helpers** → search for **SEMS Full SOC Threshold** → set your preferred value (90–100%).
-
-Default: **98%**
+Two buttons on the integration's device page (not the dashboard) for directly starting or stopping the inverter, independent of curtailment — neither changes the curtailment switches, and a stopped inverter stays stopped until started again. Stopping takes effect quickly; starting can take a few minutes to complete (grid-sync/ramp-up), so allow time before expecting **Inverter Status** to show *Working* — confirm with **Check Inverter Status**.
 
 ---
 
 ## Troubleshooting
 
-**Dependency warning on startup** — install [hacs-custom-amber-integration](https://github.com/kane81/hacs-custom-amber-integration) and ensure it is polling prices. Check `amber_general_price_actual` in Developer Tools → States.
+**No entities on the device page** — setup did not complete. Open the integration's card; if it shows an error state, select **Configure** and re-enter the SEMS Portal credentials.
 
-**Login failed** — check `sems_email` and `sems_password` in `secrets.yaml`. Verify you can log into [au.semsportal.com](https://au.semsportal.com).
+**"Missing Dependency" notification** — the baseline Amber integration is not installed or not yet providing price data.
 
-**Inverter not responding** — check `sems_inverter_sn` matches the serial number on your inverter label exactly. Verify inverter is online in the SEMS+ app.
+**"Power Sensors Not Configured" notification** — the Amber integration's Power sensor helpers are blank. See [Power sensors](#power-sensors).
 
-**Curtailment not firing** — confirm **Enable Automation: SEMS Solar Curtailment** is ON in Overview → Devices → Helpers. Check the automation trace — the condition block shows exactly why it exited early.
+**Curtailment never triggers** — confirm Automatic Curtailment is on and `sensor.amber_smart_shift_sell_price` is actually negative (**Developer Tools → States**).
 
-**Load tracking not adjusting** — confirm **Enable Automation: SEMS Load Tracking Adjustments** is ON. Check sensor helper entity IDs are set correctly in Overview → Devices → Helpers.
+**SEMS API calls failing** — press **Refresh Inverter Info** on the device page, or re-enter the SEMS Portal password via **Configure** if it has changed.
 
-**After any config change** — Developer Tools → YAML → Reload All (or restart HA).
-
----
-
-## Related Projects
-
-- [hacs-custom-amber-integration](https://github.com/kane81/hacs-custom-amber-integration) — **required** — provides Amber Electric price helpers
+**Restart blocked by an invalid configuration.yaml** — re-run `install.sh`; it detects and repairs the misplaced dashboard entry an earlier version of the installer could leave behind, and validates the file before restarting.
 
 ---
 
-## License
+## Uninstalling
 
-MIT — see [LICENSE](LICENSE) file. See disclaimer above regarding the undocumented SEMS Portal API.
+```
+bash /config/custom_components/sems_curtailment/uninstall.sh
+```
 
-## Contributing
+Then remove the integration under **Settings → Devices & Services** (this deletes the stored credentials and all entities) and remove the repository from HACS.
 
-Issues and PRs welcome. Contributions should include testing against the current SEMS+ app to verify API compatibility.
+---
+
+## Appendix
+
+### Entities
+
+#### Switches
+
+- `switch.sems_curtailment_automatic_curtailment` — master switch for price-driven curtailment
+- `switch.sems_curtailment_curtailment_active` — on while the inverter is curtailed; manual toggle when Automatic Curtailment is off
+- `switch.sems_curtailment_load_tracking` — real-time limit adjustment while curtailment is active
+
+#### Numbers
+
+- `number.sems_curtailment_inverter_capacity` — discovered from the SEMS Portal; refreshed by the Refresh Inverter Info button
+- `number.sems_curtailment_battery_max_charge_rate`
+- `number.sems_curtailment_load_change_threshold`
+- `number.sems_curtailment_full_soc_threshold`
+- `number.sems_curtailment_current_power_limit` — the current curtailment target, tracked by the automations; not edited by hand
+
+#### Sensors
+
+- `sensor.sems_curtailment_inverter_serial_number`
+- `sensor.sems_curtailment_sems_station`
+- `sensor.sems_curtailment_inverter_status` — *Unknown* until Check Inverter Status is pressed; never polled automatically
+
+#### Buttons
+
+- `button.sems_curtailment_refresh_inverter_info` — re-runs discovery
+- `button.sems_curtailment_check_inverter_status` — on-demand online/offline check
+- `button.sems_curtailment_send_start_inverter_command`
+- `button.sems_curtailment_send_stop_inverter_command`
+
+#### Service
+
+- `sems_curtailment.set_power_limit` — `limit: 0-100`; returns `{success, message}` when called with a response
+
+### Power sensors
+
+Battery, solar, load, and grid readings are read from the baseline Amber integration's Power sensor text helpers (`text.amber_smart_shift_power_*`), configured there rather than in this project. Battery capacity comes from `sensor.amber_smart_shift_battery_capacity`. Without the Power sensors, curtailment still operates on price alone, but load and battery read as 0 W, so SOC-based sizing and Load Tracking are inaccurate.
 
 ---
 
 ## Credits
 
-- **[hacs-custom-amber-integration](https://github.com/kane81/hacs-custom-amber-integration)** — the companion Amber Electric integration this project depends on
-- **[Official Amber Electric Integration](https://www.home-assistant.io/integrations/amberelectric/)**
-- **[homeassistant-alphaESS](https://github.com/CharlesGillanders/homeassistant-alphaESS)** by Charles Gillanders — AlphaESS battery integration used as sensor reference
-- Thanks to **hudakh**, **chrismalec87**, 6minchinbury, **Jacob Kairl** and the rest of the beta testers.
+Uses the SEMS Portal API (au.semsportal.com), reverse-engineered from the SEMS app. Not affiliated with or endorsed by GoodWe.
+
+## License
+
+See `LICENSE`.
+
+## Contributing
+
+Issues and pull requests are welcome.

@@ -1,120 +1,234 @@
-# GoodWe SEMS Curtailment - Dashboard Card Template
-# ===================================================
+# SEMS + Amber Dashboard - Status Card
+# Paste the content below into a Markdown card.
 #
-# This file contains the Markdown card template for the GoodWe SEMS
-# Curtailment Home Assistant integration dashboard card.
-#
-# To add this card manually to your HA dashboard:
-#   1. Go to Overview in the HA sidebar
-#   2. Click ⋮ (top right) → Edit dashboard
-#   3. Click + Add Card → search for Markdown
-#   4. Copy everything BELOW this comment block into the Content field
-#   5. Click Save
-#
-# The card shows live power flow, Amber prices, curtailment status
-# and all automation states at a glance.
-# Icon legend: 🟢 active · 🔴 enabled/waiting · 🚫 disabled · ⚠️ blocked
-#
-# ===================================================
+{% set P = 'sensor.amber_smart_shift_' %}
+{% macro price(d) -%}
+{%- set c = d * 100 -%}
+{%- if (c | abs) >= 100 -%}
+{{ '-' if c < 0 else '' }}${{ '%.2f' | format((c | abs) / 100) }}
+{%- else -%}
+{{ c | round(0) | int if c >= 0 else c | round(0, 'floor') | int }}c
+{%- endif -%}
+{%- endmacro %}
 
-{# --- Power sensors (entity IDs configured via input_text helpers) --- #}
-{% set battery_w = states(states('input_text.sensor_battery_io')) | float(0) %}
-{% set solar_w   = states(states('input_text.sensor_solar'))       | float(0) %}
-{% set load_w    = states(states('input_text.sensor_load'))        | float(0) %}
-{% set grid_w    = states(states('input_text.sensor_grid'))        | float(0) %}
-{% set soc       = states(states('input_text.sensor_battery_soc')) | float(0) %}
-{# --- Battery helpers --- #}
-{% set capacity_kwh         = states('input_number.battery_capacity_kwh')      | float(10) %}
-{% set max_battery_charge_w = states('input_number.battery_max_charge_rate_w') | float(4640) %}
-{% set battery_charge_w     = battery_w | abs if battery_w < 0 else 0 %}
-{# --- SEMS inverter helpers --- #}
-{% set inverter_capacity_w = states('input_number.sems_inverter_capacity_w')  | float(10000) %}
-{% set current_limit_pct   = states('input_number.sems_current_power_limit')  | int(100) %}
-{% set floor_pct           = ((max_battery_charge_w / inverter_capacity_w) * 100) | round(0) | int %}
-{% set calculated_pct      = (((load_w + battery_charge_w) / inverter_capacity_w) * 100) | round(0) | int %}
-{% set target_pct          = [calculated_pct, floor_pct] | max if soc < 100 else ((load_w / inverter_capacity_w) * 100) | round(0) | int %}
-{% set threshold_w         = states('input_number.sems_load_threshold_watts') | float(500) %}
-{# --- Amber prices and interval metrics --- #}
-{% set buy_price    = states('input_number.amber_general_price_actual')  | float(0) %}
-{% set sell_price   = states('input_number.amber_feed_in_price_actual')  | float(0) %}
-{% set sell_display = (sell_price * 100) | round(0) | int if sell_price >= 0 else (sell_price * 100) | round(0, 'floor') | int %}
-{% set amber_soc    = states('input_number.amber_battery_soc')           | float(0) %}
-{% set import_cost  = states('input_number.amber_import_cost_cents')     | float(0) %}
-{% set export_earn  = states('input_number.amber_export_earnings_cents') | float(0) %}
-{% set total_earn   = states('input_number.amber_total_earnings_cents')  | float(0) %}
-{# --- Amber automation thresholds and windows --- #}
-{% set min_sell_price  = states('input_number.amber_min_sell_price')                    | float(0.15) %}
-{% set min_soc_to_sell = states('input_number.amber_min_soc_to_sell')                   | float(10) %}
-{% set fit_start       = states('input_datetime.amber_force_sell_on_custom_fit_start')  [0:5] %}
-{% set fit_end         = states('input_datetime.amber_force_sell_on_custom_fit_end')    [0:5] %}
-{% set ss_block_start  = states('input_datetime.amber_block_smart_shift_start')         [0:5] %}
-{% set ss_block_end    = states('input_datetime.amber_block_smart_shift_end')           [0:5] %}
-{% set sems_start      = states('input_datetime.sems_curtailment_start')                [0:5] %}
-{% set sems_end        = states('input_datetime.sems_curtailment_end')                  [0:5] %}
-{% set en_force_charge     = is_state('input_boolean.amber_enable_force_charge_custom_rate', 'on') %}
-{% set force_charge_active = is_state('input_boolean.amber_force_charge_active',           'on') %}
-{% set fc_start        = states('input_datetime.amber_force_charge_start')[0:5] %}
-{% set fc_end          = states('input_datetime.amber_force_charge_end')[0:5] %}
-{% set max_buy_price   = states('input_number.amber_max_buy_price_to_charge') | float(0.05) %}
-{% set max_soc_charge  = states('input_number.amber_max_soc_to_charge') | float(100) %}
-{# --- Automation enable flags --- #}
-{% set en_power_limit   = is_state('input_boolean.sems_enable_power_limit',             'on') %}
-{% set en_load_tracking = is_state('input_boolean.sems_enable_load_tracking',           'on') %}
-{% set en_force_export  = is_state('input_boolean.amber_enable_force_export_custom_fit','on') %}
-{% set en_block_ss      = is_state('input_boolean.amber_enable_block_smart_shift',      'on') %}
-{% set en_neg_notify    = is_state('input_boolean.amber_enable_negative_price_notify',  'on') %}
-{# --- Automation session state flags --- #}
-{% set curtailment_active  = is_state('input_boolean.sems_curtailment_active',        'on') %}
-{% set manual_solar_off    = is_state('input_boolean.sems_manual_disable_solar',      'on') %}
-{% set force_export_active = is_state('input_boolean.amber_force_export_active',      'on') %}
-{% set ss_blocked          = is_state('input_boolean.amber_block_smart_shift_active', 'on') %}
-{% set battery_offline     = is_state('input_boolean.amber_battery_offline',          'on') %}
-{# --- Derived display values --- #}
-{% set solar_disp  = (solar_w / 1000) | round(2) ~ ' kW'   if solar_w  >= 1000 else solar_w  | round(0) | int ~ ' W' %}
-{% set load_disp   = (load_w  / 1000) | round(2) ~ ' kW'   if load_w   >= 1000 else load_w   | round(0) | int ~ ' W' %}
-{% set grid_abs    = grid_w | abs %}
-{% set grid_disp   = (grid_abs / 1000) | round(2) ~ ' kW'  if grid_abs >= 1000 else grid_abs  | round(0) | int ~ ' W' %}
-{% set bat_abs  = battery_w | abs %}
-{% set bat_disp = (bat_abs / 1000) | round(2) ~ ' kW' if bat_abs >= 1000 else bat_abs | round(0) | int ~ ' W' %}
-{# --- Battery time-to-full calculation --- #}
-{% set charge_kw     = bat_abs / 1000 %}
-{% set remaining_kwh = (100 - soc) / 100 * capacity_kwh %}
-{% set hours_to_full = remaining_kwh / charge_kw if charge_kw > 0 else 0 %}
-{% set ttf_h         = hours_to_full | int %}
-{% set ttf_m         = ((hours_to_full - ttf_h) * 60) | int %}
-{% set ttf_finish    = (now().timestamp() + hours_to_full * 3600) | timestamp_custom('%I:%M %p') %}
-{% set ttf_str       = 'Full in ' ~ ttf_h ~ 'h ' ~ ttf_m ~ 'm — approx ' ~ ttf_finish %}
-{% set bat_state = '← Charging ' ~ bat_disp ~ ' - ' ~ soc | round(0) | int ~ '%
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;' ~ ttf_str if (battery_w < 0 and soc < 100)
-  else '← Charging ' ~ bat_disp ~ ' - 100% (Full)' if (battery_w < 0 and soc >= 98)
-  else '- Discharging ' ~ bat_disp ~ ' - ' ~ soc | round(0) | int ~ '%' if battery_w > 0
-  else '- Idle · ' ~ soc | round(0) | int ~ '%' %}
-{# --- Automation icon logic --- #}
-{% set ic_power_limit   = '🚫' if not en_power_limit   else ('🟢' if curtailment_active  else '🔴') %}
-{% set ic_load_tracking = '🚫' if (not en_load_tracking or not en_power_limit) else ('🟢' if curtailment_active else '🔴') %}
-{% set ic_force_export  = '🚫' if not en_force_export else ('🟢' if force_export_active else '🔴') %}
-{% set ic_block_ss      = '🚫' if not en_block_ss else ('🟢' if ss_blocked else '🔴') %}
-{% set ic_neg_notify    = '🚫' if not en_neg_notify    else '🟢' %}
-{% set ic_force_charge  = '🚫' if not en_force_charge else ('🟢' if force_charge_active else '🔴') %}
+{% set buy = states(P ~ 'buy_price') | float(0) %}
+{% set sell = states(P ~ 'sell_price') | float(0) %}
+{% set soc = states(P ~ 'battery_level') | float(0) %}
+{% set online = is_state('binary_sensor.amber_smart_shift_battery_connection', 'on') %}
+{% set net = states(P ~ 'current_net_earnings') | float(0) %}
+{% set manual = states(P ~ 'current_manual_action') %}
+{% set polled = states(P ~ 'last_price_poll') %}
 
+{# -------------------------------------------------------
+   Sell rule selection - mirrors auto_sell.yaml's own logic
+   exactly (highest satisfied battery threshold wins). Kept
+   in sync by hand since a dashboard markdown card can't
+   share Jinja with a blueprint file.
+   ------------------------------------------------------- #}
+{% set sell_rules = [
+  (is_state('switch.amber_smart_shift_enable_sell_rule_1','on'), states('number.amber_smart_shift_sell_rule_1_battery_above')|float(-1), states('number.amber_smart_shift_sell_rule_1_min_price')|float(999)),
+  (is_state('switch.amber_smart_shift_enable_sell_rule_2','on'), states('number.amber_smart_shift_sell_rule_2_battery_above')|float(-1), states('number.amber_smart_shift_sell_rule_2_min_price')|float(999)),
+  (is_state('switch.amber_smart_shift_enable_sell_rule_3','on'), states('number.amber_smart_shift_sell_rule_3_battery_above')|float(-1), states('number.amber_smart_shift_sell_rule_3_min_price')|float(999)),
+] %}
+{% set sr = namespace(batt=none, price=none, any_enabled=false) %}
+{% for enabled, batt, pr in sell_rules %}
+  {% if enabled %}{% set sr.any_enabled = true %}{% endif %}
+  {% if enabled and soc > batt and (sr.batt is none or batt > sr.batt) %}
+    {% set sr.batt = batt %}{% set sr.price = pr %}
+  {% endif %}
+{% endfor %}
+{% set sell_selected = sr.batt is not none %}
+{% set sell_active = sell_selected and sell >= sr.price %}
+
+{# Buy rule selection - mirrors auto_buy.yaml (lowest satisfied wins) #}
+{% set buy_rules = [
+  (is_state('switch.amber_smart_shift_enable_buy_rule_1','on'), states('number.amber_smart_shift_buy_rule_1_battery_below')|float(101), states('number.amber_smart_shift_buy_rule_1_max_price')|float(-999)),
+  (is_state('switch.amber_smart_shift_enable_buy_rule_2','on'), states('number.amber_smart_shift_buy_rule_2_battery_below')|float(101), states('number.amber_smart_shift_buy_rule_2_max_price')|float(-999)),
+  (is_state('switch.amber_smart_shift_enable_buy_rule_3','on'), states('number.amber_smart_shift_buy_rule_3_battery_below')|float(101), states('number.amber_smart_shift_buy_rule_3_max_price')|float(-999)),
+] %}
+{% set br = namespace(batt=none, price=none, any_enabled=false) %}
+{% for enabled, batt, pr in buy_rules %}
+  {% if enabled %}{% set br.any_enabled = true %}{% endif %}
+  {% if enabled and soc < batt and (br.batt is none or batt < br.batt) %}
+    {% set br.batt = batt %}{% set br.price = pr %}
+  {% endif %}
+{% endfor %}
+{% set buy_selected = br.batt is not none %}
+{% set buy_active = buy_selected and buy <= br.price %}
+
+{% set en_ss_off = is_state('switch.amber_smart_shift_auto_disable_smart_shift_when_idle', 'on') %}
+{% set ss_on = is_state('switch.amber_smart_shift_enable_smart_shift', 'on') %}
+{% set active_ss_off = en_ss_off and not ss_on and manual == 'none' %}
+
+{# SEMS curtailment state #}
+{% set en_auto = is_state('switch.sems_curtailment_automatic_curtailment', 'on') %}
+{% set curtailment_active = is_state('switch.sems_curtailment_curtailment_active', 'on') %}
+{% set en_load_tracking = is_state('switch.sems_curtailment_load_tracking', 'on') %}
+{% set current_limit = states('number.sems_curtailment_current_power_limit') | int(100) %}
+{% set threshold_w = states('number.sems_curtailment_load_change_threshold') | float(500) %}
+
+{%- set amber_text -%}
 **💲 Amber**
-&nbsp;&nbsp;Buy **{{ (buy_price * 100) | round(0) | int }}c** &nbsp;&nbsp; Sell **{{ sell_display }}c** &nbsp;&nbsp; Amber SOC **{{ '⚠️' if battery_offline else (amber_soc | round(0) | int ~ '%') }}**
-{{ '&nbsp;&nbsp;⚠️ **Amber Battery Connection Offline**' if battery_offline else '' }}
-&nbsp;&nbsp;{{ '⚠️ Curtailment **ACTIVE** — Solar at **' ~ current_limit_pct ~ '%** ' ~ '' if curtailment_active else '☀️ Curtailment **OFF** — Solar at **100%**' }}
-&nbsp;&nbsp;Import **${{ '%.2f' | format(import_cost / 100) }}** &nbsp;&nbsp; Export **${{ '%.2f' | format((export_earn / 100) | abs) }}** &nbsp;&nbsp; {{ '💰 Credit **$' ~ '%.2f' | format(total_earn / 100) ~ '**' if total_earn > 0 else '💸 Expense **$' ~ '%.2f' | format((total_earn / 100) | abs) ~ '**' if total_earn < 0 else '**$0.00**' }}
-&nbsp;&nbsp;Last checked **{{ states('input_datetime.amber_last_polled') | as_timestamp | timestamp_custom('%I:%M %p') }}**
+&nbsp;&nbsp;Buy **{{ price(buy) }}** &nbsp;&nbsp; Sell **{{ price(sell) }}** &nbsp;&nbsp; Battery **{{ '⚠️ offline' if not online else (soc | round(0) | int ~ '%') }}**
+&nbsp;&nbsp;{{ '⚠️ Curtailment **ACTIVE** — Solar at **' ~ current_limit ~ '%**' if curtailment_active else '☀️ Curtailment **OFF** — Solar at **100%**' }}
+&nbsp;&nbsp;Import **${{ '%.2f' | format(states(P ~ 'current_import_cost') | float(0) / 100) }}** &nbsp;&nbsp; Export **${{ '%.2f' | format((states(P ~ 'current_export_earnings') | float(0) / 100) | abs) }}** &nbsp;&nbsp; 💸 Expense **${{ '%.2f' | format((net / 100) | abs) }}**
+&nbsp;&nbsp;Last price poll **{{ polled if polled in ['unknown','unavailable'] else (polled | as_timestamp | timestamp_custom('%I:%M %p')) }}**
+{%- endset -%}
 
-**⚡ Power**
-&nbsp;&nbsp;🔋 Battery {{ bat_state }}
-&nbsp;&nbsp;☀️ Solar **{{ solar_disp }}**
-&nbsp;&nbsp;🏠 Load **{{ load_disp }}**
-&nbsp;&nbsp;{{ '⚡ Grid Consuming **' ~ grid_disp ~ '**' if grid_w > 5 else ('⚡ Grid Feed-in **' ~ grid_disp ~ '**' if grid_w < -5 else ('⚡ Grid ~0W — Solar curtailed to load' if curtailment_active else '⚡ Grid ~0W')) }}
+{# -------------------------------------------------------
+   Everything below is built as: each SECTION is captured as
+   a string (either via {% set x %}...{% endset %} for text
+   with embedded {{ }} substitutions, like amber_text above,
+   or via a namespace + list-append + join for a variable
+   number of conditionally-visible rows, like power/auto
+   below). All the sections that exist are collected into one
+   list and joined with a literal blank line between them.
 
-**🤖 Automations**
-&nbsp;&nbsp;{{ '🔴' if manual_solar_off else '🟢' }} **Manual Disable Solar**{{ ' — Solar at 0%' if manual_solar_off else '' }}
-&nbsp;&nbsp;{{ ic_power_limit }} **SEMS Curtailment** -  {{ sems_start }}-{{ sems_end }}{{ ' · **' ~ current_limit_pct ~ '%**' if curtailment_active else '' }}
-&nbsp;&nbsp;{{ ic_load_tracking }} **SEMS Load Realtime Adj** - Threshold {{ threshold_w | int }}W{{ ' ⚠️ needs Power Limit ON' if en_load_tracking and not en_power_limit else '' }}
-&nbsp;&nbsp;{{ ic_force_export }} **Export** >= {{ (min_sell_price * 100) | round(0) | int }}c · Min SOC {{ min_soc_to_sell | round(0) | int }}% · {{ fit_start }}–{{ fit_end }}
-&nbsp;&nbsp;{{ ic_force_charge }} **Charge** <= {{ (max_buy_price * 100) | round(0) | int }}c · Max SOC {{ max_soc_charge | int }}% · {{ fc_start }}–{{ fc_end }}
-&nbsp;&nbsp;{{ ic_block_ss }} **Block Smart Shift** - {{ ss_block_start }}–{{ ss_block_end }}{{ ' · Active' if ss_blocked else '' }}
-&nbsp;&nbsp;{{ ic_neg_notify }} **Negative Price Notify**
+   This is deliberately NOT built from literal text lines
+   mixed with {% if %}/{% endif %} tags wrapping them, even
+   with whitespace-control dashes. That was tried first and
+   failed two different ways: without dashes, every tag-only
+   line left a blank line behind; with dashes on both sides
+   of every tag, adjacent tags each ate the newline the OTHER
+   side needed, collapsing every row onto one line. Neither
+   dash placement can satisfy "no gap between two shown
+   rows" and "no gap when a row is hidden" at the same time
+   once literal text lines sit between the tags - trimming
+   only controls whitespace immediately touching a tag, not
+   whether a row exists at all. Building each section as a
+   plain string and joining once, after every conditional has
+   already been resolved, sidesteps the problem rather than
+   trying to win the whitespace fight tag-by-tag.
+   ------------------------------------------------------- #}
+{%- macro fmt(w) -%}
+{%- set a = w | abs -%}
+{{ (a/1000) | round(2) ~ ' kW' if a >= 1000 else a | round(0) | int ~ ' W' }}
+{%- endmacro -%}
+
+{# Shared by the manual-action countdown and the battery
+   time-to-full estimate below - factored out rather than
+   duplicated, since both need the same hour/minute
+   pluralization logic. #}
+{%- macro fmt_duration(total_seconds) -%}
+{%- set hh = total_seconds // 3600 -%}
+{%- set mm = (total_seconds % 3600) // 60 -%}
+{%- if hh > 0 -%}
+  {%- set hh_text = (hh | string) ~ ' hour' ~ ('s' if hh != 1 else '') -%}
+  {%- if mm > 0 -%}
+    {{ hh_text }} {{ mm }} minute{{ 's' if mm != 1 else '' }}
+  {%- else -%}
+    {{ hh_text }}
+  {%- endif -%}
+{%- elif total_seconds >= 60 -%}
+  {{ mm }} minute{{ 's' if mm != 1 else '' }}
+{%- else -%}
+  less than a minute
+{%- endif -%}
+{%- endmacro -%}
+
+{%- set batt_id = states('text.amber_smart_shift_power_battery_sensor') -%}
+{%- set batt_lvl_id = states('text.amber_smart_shift_power_battery_level_sensor') -%}
+{%- set solar_id = states('text.amber_smart_shift_power_solar_sensor') -%}
+{%- set load_id = states('text.amber_smart_shift_power_load_sensor') -%}
+{%- set grid_id = states('text.amber_smart_shift_power_grid_sensor') -%}
+
+{%- set has_battery = batt_id not in ['', 'unknown', 'unavailable'] -%}
+{%- set has_solar = solar_id not in ['', 'unknown', 'unavailable'] -%}
+{%- set has_load = load_id not in ['', 'unknown', 'unavailable'] -%}
+{%- set has_grid = grid_id not in ['', 'unknown', 'unavailable'] -%}
+
+{%- set power = namespace(items=[]) -%}
+{%- if has_battery -%}
+  {%- set battery_w = states(batt_id) | float(0) -%}
+  {%- if batt_lvl_id not in ['', 'unknown', 'unavailable'] -%}
+    {%- set power_soc = states(batt_lvl_id) | float(0) -%}
+  {%- else -%}
+    {%- set power_soc = soc -%}
+  {%- endif -%}
+  {%- if battery_w < 0 -%}
+    {%- set charge_line = '&nbsp;&nbsp;🔋 Battery — Charging **' ~ fmt(battery_w) ~ '** - ' ~ (power_soc | round(0) | int) ~ '%' -%}
+    {%- set battery_capacity_wh = states('sensor.amber_smart_shift_battery_capacity') | float(0) -%}
+    {%- set charge_rate_w = battery_w | abs -%}
+    {%- if battery_capacity_wh > 0 and charge_rate_w > 10 and power_soc < 100 -%}
+      {%- set remaining_wh = battery_capacity_wh * (100 - power_soc) / 100 -%}
+      {%- set eta_seconds = (remaining_wh / charge_rate_w * 3600) | int -%}
+      {%- set charge_line = charge_line ~ ' - full in ' ~ fmt_duration(eta_seconds) -%}
+    {%- endif -%}
+    {%- set power.items = power.items + [charge_line] -%}
+  {%- elif battery_w > 0 -%}
+    {%- set power.items = power.items + ['&nbsp;&nbsp;🔋 Battery — Discharging **' ~ fmt(battery_w) ~ '** - ' ~ (power_soc | round(0) | int) ~ '%'] -%}
+  {%- else -%}
+    {%- set power.items = power.items + ['&nbsp;&nbsp;🔋 Battery — Idle - ' ~ (power_soc | round(0) | int) ~ '%'] -%}
+  {%- endif -%}
+{%- endif -%}
+{%- if has_solar -%}
+  {%- set power.items = power.items + ['&nbsp;&nbsp;☀️ Solar **' ~ fmt(states(solar_id) | float(0)) ~ '**'] -%}
+{%- endif -%}
+{%- if has_load -%}
+  {%- set power.items = power.items + ['&nbsp;&nbsp;🏠 Load **' ~ fmt(states(load_id) | float(0)) ~ '**'] -%}
+{%- endif -%}
+{%- if has_grid -%}
+  {%- set grid_w = states(grid_id) | float(0) -%}
+  {%- if grid_w > 5 -%}
+    {%- set power.items = power.items + ['&nbsp;&nbsp;⚡ Grid Consuming **' ~ fmt(grid_w) ~ '**'] -%}
+  {%- elif grid_w < -5 -%}
+    {%- set power.items = power.items + ['&nbsp;&nbsp;⚡ Grid Feed-in **' ~ fmt(grid_w) ~ '**'] -%}
+  {%- else -%}
+    {%- set power.items = power.items + ['&nbsp;&nbsp;⚡ Grid ~0W'] -%}
+  {%- endif -%}
+{%- endif -%}
+
+{%- set auto = namespace(items=[]) -%}
+{%- if not sr.any_enabled -%}
+  {%- set auto.items = auto.items + ['&nbsp;&nbsp;🚫 Auto Sell'] -%}
+{%- elif sell_active -%}
+  {%- set auto.items = auto.items + ['&nbsp;&nbsp;🟢 Auto Sell — Battery > ' ~ (sr.batt | round(0) | int) ~ '%, selling at ' ~ price(sell)] -%}
+{%- elif sell_selected -%}
+  {%- set auto.items = auto.items + ['&nbsp;&nbsp;🔴 Auto Sell — Battery > ' ~ (sr.batt | round(0) | int) ~ '%, selling when price >= ' ~ price(sr.price)] -%}
+{%- else -%}
+  {%- set auto.items = auto.items + ['&nbsp;&nbsp;🔴 Auto Sell'] -%}
+{%- endif -%}
+{%- if not br.any_enabled -%}
+  {%- set auto.items = auto.items + ['&nbsp;&nbsp;🚫 Auto Buy'] -%}
+{%- elif buy_active -%}
+  {%- set auto.items = auto.items + ['&nbsp;&nbsp;🟢 Auto Buy — Battery < ' ~ (br.batt | round(0) | int) ~ '%, buying at ' ~ price(buy)] -%}
+{%- elif buy_selected -%}
+  {%- set auto.items = auto.items + ['&nbsp;&nbsp;🔴 Auto Buy — Battery < ' ~ (br.batt | round(0) | int) ~ '%, buying when price <= ' ~ price(br.price)] -%}
+{%- else -%}
+  {%- set auto.items = auto.items + ['&nbsp;&nbsp;🔴 Auto Buy'] -%}
+{%- endif -%}
+{%- set auto.items = auto.items + ['&nbsp;&nbsp;' ~ ('🟢' if active_ss_off else ('🔴' if en_ss_off else '🚫')) ~ ' Auto Disable Smart Shift When Idle'] -%}
+{%- if manual not in ['none', 'unknown', 'unavailable'] -%}
+  {%- set action_icon = {'charge': '🔋⬆️', 'discharge': '🔋⬇️', 'preserve-charge': '🔒', 'self-consume': '🏠'}.get(manual, '⚡') -%}
+  {%- set action_label = {'charge': 'Currently Charging', 'discharge': 'Currently Discharging', 'preserve-charge': 'Currently Preserving', 'self-consume': 'Currently Self Consuming'}.get(manual, 'Manual Action Active') -%}
+  {%- set ends = states('sensor.amber_smart_shift_manual_action_ends') -%}
+  {%- set remaining_text = namespace(value='') -%}
+  {%- if ends not in ['unknown', 'unavailable', 'none', None] -%}
+    {%- set remaining = (as_timestamp(ends) - as_timestamp(now())) | int -%}
+    {%- if remaining > 0 -%}
+      {%- set remaining_text.value = ' — ends in ' ~ fmt_duration(remaining) -%}
+    {%- endif -%}
+  {%- endif -%}
+  {%- set auto.items = auto.items + ['&nbsp;&nbsp;' ~ action_icon ~ ' ' ~ action_label ~ remaining_text.value] -%}
+{%- endif -%}
+{# SEMS curtailment — always one line; Load Tracking only shown
+   when Automatic Curtailment is on and load tracking is enabled #}
+{%- if en_auto -%}
+  {%- if curtailment_active -%}
+    {%- set auto.items = auto.items + ['&nbsp;&nbsp;🟢 Automatic Curtailment — Buy ' ~ price(buy) ~ ' · Sell ' ~ price(sell)] -%}
+  {%- else -%}
+    {%- set auto.items = auto.items + ['&nbsp;&nbsp;🔴 Automatic Curtailment — Buy ' ~ price(buy) ~ ' · Sell ' ~ price(sell)] -%}
+  {%- endif -%}
+  {%- if en_load_tracking -%}
+    {%- set auto.items = auto.items + ['&nbsp;&nbsp;🟢 SEMS Load Realtime Adj — Threshold ' ~ (threshold_w | int) ~ 'W'] -%}
+  {%- endif -%}
+{%- else -%}
+  {%- set auto.items = auto.items + ['&nbsp;&nbsp;🔴 Automatic Curtailment'] -%}
+{%- endif -%}
+
+{%- set sections = namespace(parts=[amber_text]) -%}
+{%- if power.items -%}
+  {%- set sections.parts = sections.parts + ['**⚡ Power**\n' ~ (power.items | join('\n'))] -%}
+{%- endif -%}
+{%- set sections.parts = sections.parts + ['**🤖 Automations**\n' ~ (auto.items | join('\n'))] -%}
+{{ sections.parts | join('\n\n') }}
