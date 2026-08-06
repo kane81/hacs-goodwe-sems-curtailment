@@ -55,20 +55,13 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 
 from .api import SemsApi, SemsApiError, SemsAuthError
+from .helpers import SIZING_CONF_KEYS, async_apply_sizing
 from .const import (
     ATTR_LIMIT,
-    CONF_BATTERY_MAX_CHARGE_RATE_W,
-    CONF_FULL_SOC_THRESHOLD,
-    CONF_INVERTER_CAPACITY_W,
     CONF_INVERTER_SN,
-    CONF_LOAD_THRESHOLD_W,
     CONF_SEMS_EMAIL,
     CONF_SEMS_PASSWORD,
     DOMAIN,
-    KEY_BATTERY_MAX_CHARGE_RATE_W,
-    KEY_FULL_SOC_THRESHOLD,
-    KEY_INVERTER_CAPACITY_W,
-    KEY_LOAD_THRESHOLD_W,
     SERVICE_SET_POWER_LIMIT,
 )
 
@@ -84,16 +77,6 @@ PLATFORMS: list[Platform] = [
 SET_POWER_LIMIT_SCHEMA = vol.Schema(
     {vol.Required(ATTR_LIMIT): vol.All(vol.Coerce(int), vol.Range(min=0, max=100))}
 )
-
-# Which number entity each config-entry sizing value seeds. Keyed by entity
-# key, valued by config key - both taken from const.py rather than repeated
-# as literals, so a rename in one place can't silently desync the two.
-SIZING_CONF_KEYS: dict[str, str] = {
-    KEY_INVERTER_CAPACITY_W: CONF_INVERTER_CAPACITY_W,
-    KEY_BATTERY_MAX_CHARGE_RATE_W: CONF_BATTERY_MAX_CHARGE_RATE_W,
-    KEY_LOAD_THRESHOLD_W: CONF_LOAD_THRESHOLD_W,
-    KEY_FULL_SOC_THRESHOLD: CONF_FULL_SOC_THRESHOLD,
-}
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -122,38 +105,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.services.async_remove(DOMAIN, SERVICE_SET_POWER_LIMIT)
     return unloaded
 
-
-async def async_apply_sizing(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Push the config entry's sizing values onto the number entities.
-
-    Called only from the options flow, on explicit form submission - see
-    the module docstring for why this must not run on every setup. (The
-    Refresh Inverter Info button updates the inverter capacity number too,
-    but through its own capacity-only helper in button.py, deliberately not
-    this function - refreshing discovery shouldn't reset the user's other
-    hand-tuned values.)
-
-    Entities are looked up via the registry by unique_id rather than by a
-    guessed entity_id, since the user is free to rename them.
-    """
-    registry = er.async_get(hass)
-    for entity_key, conf_key in SIZING_CONF_KEYS.items():
-        if conf_key not in entry.data:
-            continue
-        entity_id = registry.async_get_entity_id(
-            "number", DOMAIN, f"{entry.entry_id}_{entity_key}"
-        )
-        if entity_id is None:
-            continue
-        try:
-            await hass.services.async_call(
-                "number",
-                "set_value",
-                {"entity_id": entity_id, "value": entry.data[conf_key]},
-                blocking=True,
-            )
-        except (HomeAssistantError, vol.Invalid):
-            _LOGGER.warning("Could not apply sizing value to %s", entity_id)
 
 
 def _async_register_services(hass: HomeAssistant) -> None:
