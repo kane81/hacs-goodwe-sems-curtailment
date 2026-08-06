@@ -104,41 +104,21 @@ The status panel reports prices, power flow, and what curtailment is doing:
 
 🟢 active · 🔴 enabled, waiting · 🚫 disabled · ⚠️ curtailment currently limiting output
 
-**Auto-installed dashboards cannot be edited in the UI.** `install.sh` registers a `mode: yaml` dashboard, which Home Assistant deliberately makes read-only in the frontend. Changes require editing `/config/lovelace/sems.yaml` directly. Re-running `install.sh` overwrites it with the shipped version.
+**Auto-installed dashboards cannot be edited in the UI.** `install.sh` registers a `mode: yaml` dashboard, which Home Assistant deliberately makes read-only in the frontend. Changes require editing `/config/lovelace/sems.yaml` directly, and re-running `install.sh` overwrites it with the shipped version. For a version you can edit through the UI, see [Building a UI-editable dashboard](#building-a-ui-editable-dashboard) below.
 
 ### The switches
 
 **Automatic Curtailment** is the master switch — on, the price-driven logic runs continuously; off, nothing moves and the inverter is restored to 100%. **Curtailment Active** indicates the inverter is currently curtailed; while Automatic Curtailment is off it can be toggled by hand to curtail or restore immediately, using the same SOC-based calculation. **Load Tracking** fine-tunes the limit in real time as load and battery change while curtailment is active.
 
-### Manually adding the dashboard
+### Building a UI-editable dashboard
 
-Building the dashboard manually allows full customisation in the HA Dashboard UI editor. The trade-off is the absence of the live status summary, which relies on a Jinja template the Tile card cannot reproduce.
+The auto-installed dashboard is fixed once installed — it's a `mode: yaml` file, and Home Assistant deliberately makes those read-only in the frontend. To get the same dashboard in a form you can rearrange, resize, and edit through the normal UI editor:
 
-**Setup:**
+1. **Settings → Dashboards → + Add Dashboard** → *New dashboard from scratch* → name it and save
+2. Open it → **⋮ → Edit Dashboard → ⋮ → Raw configuration editor**
+3. Delete the placeholder content, paste in the contents of [`lovelace/sems.yaml`](https://github.com/kane81/hacs-goodwe-sems-curtailment/blob/main/lovelace/sems.yaml) → **Save**
 
-1. **Settings → Dashboards → + Add Dashboard** → *New dashboard from scratch* → provide a name
-2. Open it → **Edit Dashboard**
-3. Rename the first section to *Status*. Add a card → **Markdown**, and paste in the content from [`dashboard_card.txt`](custom_components/sems_curtailment/dashboard_card.txt) → **Save**
-
-**Status section — add these as Tile cards, in order:**
-
-| Entity | Tile name | Settings |
-| --- | --- | --- |
-| `switch.sems_curtailment_automatic_curtailment` | Automatic Curtailment | Layout: Full width |
-| `switch.sems_curtailment_curtailment_active` | Curtailment Active | Layout: Full width |
-
-**Controls section — add a second section (same as step 3, without the Markdown card), then add these as Tile cards:**
-
-| Entity | Tile name | Settings |
-| --- | --- | --- |
-| `switch.sems_curtailment_load_tracking` | Load Tracking | Layout: Full width |
-| `number.sems_curtailment_load_change_threshold` | Load Change Threshold | Layout: Full width |
-| `number.sems_curtailment_full_soc_threshold` | Full SOC Threshold | — |
-| `number.sems_curtailment_inverter_capacity` | Inverter Capacity | — |
-| `number.sems_curtailment_battery_max_charge_rate` | Battery Max Charge Rate | — |
-| `sensor.amber_smart_shift_battery_capacity` | Battery Capacity | — |
-
-The four Number/Sensor tiles are left at default width so they sit in pairs; the switches and threshold use Full width. This matches the auto-installed dashboard's layout and naming.
+Done — a fully UI-editable dashboard with the same layout as the auto-installed one.
 
 ### Command-line tool
 

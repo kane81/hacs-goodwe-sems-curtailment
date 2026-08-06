@@ -137,10 +137,11 @@ if [ "$MODE" = "full" ]; then
             echo "       be edited afterward by editing the YAML file directly - Home"
             echo "       Assistant deliberately locks UI editing for this kind of"
             echo "       dashboard, so there's no drag-and-drop editor for it."
-            echo "    2) Manual - skip this and build your own instead, via Settings >"
-            echo "       Dashboards. More setup, but fully editable in the UI. See"
-            echo "       dashboard_card.txt for the status card content, and the"
-            echo "       README's 'Manually adding the dashboard' section for steps."
+            echo "    2) UI-editable - skip this and build your own instead: Settings >"
+            echo "       Dashboards > Add Dashboard > New dashboard from scratch, then"
+            echo "       Edit Dashboard > ... > Raw configuration editor, and paste in"
+            echo "       lovelace/sems.yaml from this repo. See the README's 'Building a"
+            echo "       UI-editable dashboard' section for the exact steps."
             echo ""
             read -r -p "  Install the dashboard automatically? (Y/n): " dash_choice
             if [[ "$dash_choice" =~ ^[Nn]$ ]]; then
