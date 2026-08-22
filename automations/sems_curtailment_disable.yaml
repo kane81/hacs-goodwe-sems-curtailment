@@ -33,8 +33,9 @@
         # Worth shouting about: this path exists specifically to un-curtail
         # the inverter, so a silent failure leaves solar capped with the
         # automation switched off and nothing left to retry it.
-        - service: notify.notification
+        - service: persistent_notification.create
           data:
+            notification_id: sems_curtailment_failed
             title: "SEMS Curtailment Disable Failed"
             message: >
               Failed to restore inverter to 100% after Automatic Curtailment

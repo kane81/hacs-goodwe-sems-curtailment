@@ -60,7 +60,7 @@
 #   → switch.sems_curtailment_automatic_curtailment
 #   → switch.sems_curtailment_curtailment_active
 #   → sems_curtailment.set_power_limit  (service)
-#   → notify.notification  (configured in configuration_example.yaml)
+#   → persistent_notification.create  (built in, no configuration needed)
 ################################################################################
 
 - id: sems_curtailment
@@ -136,9 +136,10 @@
                       data:
                         value: 0
                   else:
-                    - service: notify.notification
+                    - service: persistent_notification.create
                       data:
                         title: "SEMS Solar Curtailment Failed"
+                        notification_id: sems_curtailment_failed
                         message: "Failed to set inverter to 0% — buy price is negative. {{ cmd_result.message }}"
 
         # Sell price negative - curtail based on SOC
@@ -178,9 +179,10 @@
                       data:
                         value: "{{ target_limit }}"
                   else:
-                    - service: notify.notification
+                    - service: persistent_notification.create
                       data:
                         title: "SEMS Solar Curtailment Failed"
+                        notification_id: sems_curtailment_failed
                         message: >
                           Failed to set inverter — sell price negative.
                           SOC: {{ soc }}%, Load: {{ load_w }}W, Battery: {{ battery_charge_w }}W,
@@ -210,7 +212,8 @@
                   data:
                     value: 100
               else:
-                - service: notify.notification
+                - service: persistent_notification.create
                   data:
                     title: "SEMS Solar Curtailment Failed"
+                    notification_id: sems_curtailment_failed
                     message: "Failed to reset inverter to 100%. {{ cmd_result.message }}"

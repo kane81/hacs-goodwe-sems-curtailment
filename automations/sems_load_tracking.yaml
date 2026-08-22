@@ -44,7 +44,7 @@
 #   → number.sems_curtailment_full_soc_threshold
 #   → number.sems_curtailment_battery_max_charge_rate
 #   → sems_curtailment.set_power_limit  (service)
-#   → notify.notification  (configured in configuration_example.yaml)
+#   → persistent_notification.create  (built in, no configuration needed)
 ################################################################################
 
 - id: sems_load_tracking
@@ -141,8 +141,9 @@
           data:
             value: "{{ target_limit }}"
       else:
-        - service: notify.notification
+        - service: persistent_notification.create
           data:
+            notification_id: sems_load_tracking_failed
             title: "SEMS Load Tracking Failed"
             message: >
               Failed to update inverter to {{ target_limit }}%.

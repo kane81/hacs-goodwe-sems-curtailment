@@ -63,8 +63,9 @@
                 - condition: template
                   value_template: "{{ result.returncode != 0 }}"
               then:
-                - service: notify.notification
+                - service: persistent_notification.create
                   data:
+                    notification_id: sems_hacs_update_failed
                     title: "SEMS Integration Update Failed"
                     message: >
                       install.sh failed after a HACS update (exit code

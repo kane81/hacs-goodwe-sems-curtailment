@@ -93,8 +93,9 @@
                       data:
                         value: "{{ target_limit }}"
                   else:
-                    - service: notify.notification
+                    - service: persistent_notification.create
                       data:
+                        notification_id: sems_curtailment_failed
                         title: "SEMS Manual Curtailment Failed"
                         message: >
                           Failed to set inverter — Curtailment Active turned on manually.
@@ -121,7 +122,8 @@
                   data:
                     value: 100
               else:
-                - service: notify.notification
+                - service: persistent_notification.create
                   data:
+                    notification_id: sems_curtailment_failed
                     title: "SEMS Manual Curtailment Failed"
                     message: "Failed to reset inverter to 100%. {{ cmd_result.message }}"
