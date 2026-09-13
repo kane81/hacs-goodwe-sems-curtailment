@@ -29,6 +29,7 @@ CONF_STATION_NAME = "station_name"
 # unofficial and has been unreliable.
 DATA_STATUS_CODE = "status_code"
 DATA_STATUS_CHECKED_AT = "status_checked_at"
+DATA_REMOTE_CONTROL_ENABLED = "remote_control_enabled"
 
 # Dispatcher signals - button.py sends, sensor.py listens. Formatted with
 # the entry_id so multiple config entries don't cross-talk.

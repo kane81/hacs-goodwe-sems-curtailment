@@ -24,23 +24,36 @@
 #
 # Credentials come from environment variables, not a config file or a
 # command-line argument, so they don't end up in your shell history or in a
-# process list:
-#   export SEMS_EMAIL="you@example.com"
-#   export SEMS_PASSWORD="your sems portal password"
+# process list. Use SINGLE quotes, not double quotes:
+#   export SEMS_EMAIL='you@example.com'
+#   export SEMS_PASSWORD='your sems portal password'
+#
+# Why single quotes: in bash/zsh, a $ inside DOUBLE quotes tries to expand a
+# variable. A password like 'VJ9CeF05e$rkm5F' silently becomes
+# 'VJ9CeF05eF' (bash treats $rkm5F as an undefined variable and expands it
+# to empty) - no error, just a corrupted password and a confusing login
+# failure. Single quotes disable that expansion entirely, so the password
+# is used exactly as typed no matter what characters it contains.
 #
 # Optional - skips the station/inverter lookup on commands that need a
 # serial number, saving two API calls per invocation:
-#   export SEMS_INVERTER_SN="5010KMST226W0066"
+#   export SEMS_INVERTER_SN='5010KMST226W0066'
 #
 # -----------------------------------------------------------------------------
 # Usage:
 #   python3 sems_cli.py <command> [args]
 #
 # Commands:
-#   discover              - Power station and inverter this account owns:
-#                            station name/id, inverter serial, model and
-#                            rated capacity. Same lookup the integration's
-#                            config flow and Refresh Inverter Info button do.
+#   discover [serial_number] - Power station and inverter this account
+#                            owns: station name/id, inverter serial, model
+#                            and rated capacity. Same lookup the
+#                            integration's config flow and Refresh Inverter
+#                            Info button do. If the account-level station
+#                            list comes back empty (a known, confirmed
+#                            intermittent SEMS Portal issue), pass the
+#                            serial number directly (from the inverter's
+#                            label or the SEMS+ app) to look it up without
+#                            the station list at all.
 #   stations              - List every power station on the account (the
 #                            integration only ever uses the first).
 #   status                - Whether the inverter is online, plus model,
@@ -72,6 +85,7 @@
 #
 # Examples:
 #   python3 sems_cli.py discover
+#   python3 sems_cli.py discover 5010KMST226W0066   # station list is empty
 #   python3 sems_cli.py status
 #   python3 sems_cli.py detail
 #   python3 sems_cli.py limit 50
@@ -86,6 +100,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import ssl
 import sys
 import urllib.error
@@ -190,7 +205,17 @@ def login(email: str, password: str) -> str:
     seed = json.dumps({"uid": "", "timestamp": 0, "token": "", **CLIENT_HEADER})
     data = post(LOGIN_URL, {"account": email, "pwd": password, "is_local": False}, seed)
     if str(data.get("code")) != "0":
-        die(f"Login failed: {data.get('msg')} - check SEMS_EMAIL and SEMS_PASSWORD")
+        # Deliberately NOT conditional on "$" appearing in `password` here:
+        # if a double-quoted export already corrupted it, the $ and
+        # everything after it is gone by the time Python sees this value -
+        # there is no way to detect the corruption after the fact, so the
+        # only useful thing to do is always mention it as a possibility.
+        die(
+            f"Login failed: {data.get('msg')} - check SEMS_EMAIL and "
+            f"SEMS_PASSWORD. If your password contains '$', make sure you "
+            f"exported it with SINGLE quotes (export SEMS_PASSWORD='...') - "
+            f"double quotes let the shell silently eat part of it."
+        )
     d = data["data"]
     return json.dumps(
         {"uid": d["uid"], "timestamp": d["timestamp"], "token": d["token"], **CLIENT_HEADER}
@@ -236,6 +261,33 @@ def dict_value(inverter: dict, key: str) -> str | None:
             if item.get("key") == key:
                 return item.get("value")
     return None
+
+
+def discover_by_serial(token: str, sn: str) -> dict:
+    """Capacity + model directly by serial number, without the station
+    list. Fallback for when the station list returns empty - a real,
+    confirmed SEMS Portal failure mode (Sept 2026), not hypothetical: this
+    endpoint is keyed purely by serial number and keeps working regardless
+    of whether the account-level station list is behaving.
+    """
+    kv = get_inverter_kv(token, sn)
+    capacity_kw = None
+    capacity_str = kv.get("capacity")
+    if capacity_str:
+        m = re.match(r"\s*([\d.]+)\s*kW", capacity_str, re.IGNORECASE)
+        if m:
+            try:
+                capacity_kw = float(m.group(1))
+            except ValueError:
+                capacity_kw = None
+    return {
+        "station_name": None,
+        "powerstation_id": None,
+        "address": None,
+        "inverter_sn": sn,
+        "model": kv.get("model"),
+        "capacity_kw": capacity_kw,
+    }
 
 
 def discover(token: str) -> dict:
@@ -291,36 +343,40 @@ def _command_date() -> str:
     return datetime.now().strftime("%m/%d/%Y %H:%M:%S")
 
 
-def set_power_limit(token: str, sn: str, percent: int) -> None:
+def set_power_limit(token: str, sn: str, percent: int) -> dict:
     body = {
         "InverterSN": sn,
         "InverterRemotingLastSetDate": _command_date(),
         "ActivePowerLimit": str(percent),
         "ActivePowerLimitSettingMark": "1",
     }
-    check(post(SET_POWER_URL, body, token), "Set power limit")
+    response = post(SET_POWER_URL, body, token)
+    check(response, "Set power limit")
+    return response
 
 
-def _set_status(token: str, sn: str, status_code: str) -> None:
+def _set_status(token: str, sn: str, status_code: str) -> dict:
     body = {
         "InverterSN": sn,
         "InverterRemotingLastSetDate": _command_date(),
         "InverterStatusSettingMark": "1",
         "InverterStatus": status_code,
     }
-    check(post(SET_POWER_URL, body, token), "Set inverter status")
+    response = post(SET_POWER_URL, body, token)
+    check(response, "Set inverter status")
+    return response
 
 
-def start_inverter(token: str, sn: str) -> None:
+def start_inverter(token: str, sn: str) -> dict:
     """Starting a stopped inverter can take a few minutes to complete
     (grid-sync/ramp-up) - this call returns as soon as the portal accepts
     it, not once the inverter is actually back online."""
-    _set_status(token, sn, COMMAND_START)
+    return _set_status(token, sn, COMMAND_START)
 
 
-def stop_inverter(token: str, sn: str) -> None:
+def stop_inverter(token: str, sn: str) -> dict:
     """Expected to take effect quickly, unlike start_inverter()."""
-    _set_status(token, sn, COMMAND_STOP)
+    return _set_status(token, sn, COMMAND_STOP)
 
 
 # -----------------------------------------------------------------------------
@@ -332,11 +388,25 @@ def fmt(label: str, value) -> None:
     print(f"{label + ':':<22}{value}")
 
 
-def cmd_discover(token: str) -> None:
-    d = discover(token)
-    fmt("Station", d["station_name"])
-    fmt("Station ID", d["powerstation_id"])
-    if d["address"]:
+def cmd_discover(token: str, sn_arg: str | None = None) -> None:
+    if sn_arg:
+        d = discover_by_serial(token, sn_arg.strip())
+        print("(using serial-number-only lookup - station list not queried)")
+    else:
+        try:
+            d = discover(token)
+        except SystemExit:
+            print(
+                "\nAutomatic discovery failed. If you already know your inverter's "
+                "serial number (on the inverter's label, or in the SEMS+ app), try:\n"
+                f"  python3 {os.path.basename(sys.argv[0])} discover <serial_number>"
+            )
+            raise
+    if d["station_name"]:
+        fmt("Station", d["station_name"])
+    if d["powerstation_id"]:
+        fmt("Station ID", d["powerstation_id"])
+    if d.get("address"):
         fmt("Address", d["address"])
     fmt("Inverter SN", d["inverter_sn"])
     fmt("Model", d["model"] or "unknown")
@@ -365,8 +435,13 @@ def cmd_status(token: str) -> None:
     sn = resolve_sn(token)
     kv = get_inverter_kv(token, sn)
     code = str(kv.get("status"))
+    remote_control = kv.get("canStartIV")
     fmt("Inverter SN", sn)
     fmt("Status", f"{STATUS_LABELS.get(code, 'Unknown')} (code {code})")
+    fmt(
+        "Remote control",
+        "Unknown" if remote_control is None else ("Enabled" if remote_control else "Disabled"),
+    )
     fmt("Model", kv.get("model"))
     fmt("Capacity", kv.get("capacity"))
     fmt("Last reported", kv.get("last_refresh_time"))
@@ -378,6 +453,15 @@ def cmd_status(token: str) -> None:
             "\nNote: an offline inverter usually just means it isn't generating "
             "(overnight, or no sun) - the SEMS datalogger stops reporting. It "
             "does not on its own indicate a fault."
+        )
+    if remote_control is False:
+        print(
+            "\nWARNING: Remote control is DISABLED for this inverter on your "
+            "SEMS Portal account. 'limit', 'start' and 'stop' will likely "
+            "return success from the portal without the command ever "
+            "reaching the inverter - this is a known silent-failure mode, "
+            "not a bug in this tool. Contact your installer or GoodWe "
+            "support to have remote control enabled for this device."
         )
 
 
@@ -406,6 +490,44 @@ def cmd_detail(token: str) -> None:
     fmt("Last reported", inverter.get("last_refresh_time"))
 
 
+def _print_response_and_check_remote_control(token: str, sn: str, response: dict) -> None:
+    """Print a command's raw response, then check whether it likely
+    actually reached the inverter.
+
+    The portal can return a clean success response for a command that
+    never reaches the inverter - a successful response here only means
+    the portal ACCEPTED the request, not that the inverter obeyed it.
+    canStartIV is the one flag that's actually diagnostic: if it's false,
+    the command above almost certainly did nothing, no matter what the
+    response says.
+    """
+    print("Raw response:")
+    print(json.dumps(response, indent=2, ensure_ascii=False))
+    try:
+        kv = get_inverter_kv(token, sn)
+    except SystemExit:
+        print(
+            "\n(Could not fetch remote-control status to double-check this - "
+            "run 'status' separately.)"
+        )
+        return
+    remote_control = kv.get("canStartIV")
+    if remote_control is False:
+        print(
+            "\nWARNING: Remote control is DISABLED for this inverter on this "
+            "SEMS Portal account. The response above is a real success from "
+            "the portal's point of view, but it almost certainly did NOT "
+            "reach the inverter - this is a known silent-failure mode, not a "
+            "bug in this tool. Contact the account's installer or GoodWe "
+            "support to have remote control enabled for this device."
+        )
+    elif remote_control is None:
+        print(
+            "\n(Could not determine remote-control status from this account - "
+            "run 'status' to check separately.)"
+        )
+
+
 def cmd_limit(token: str, percent_arg: str) -> None:
     try:
         percent = int(percent_arg)
@@ -415,7 +537,8 @@ def cmd_limit(token: str, percent_arg: str) -> None:
         die("Limit must be between 0 and 100")
     sn = resolve_sn(token)
     print(f"Setting inverter {sn} to {percent}%...")
-    set_power_limit(token, sn, percent)
+    response = set_power_limit(token, sn, percent)
+    _print_response_and_check_remote_control(token, sn, response)
     print("Done.")
     if percent == 0:
         print(
@@ -446,8 +569,12 @@ def main() -> None:
     password = os.environ.get("SEMS_PASSWORD")
     if not email or not password:
         print("ERROR: Set SEMS_EMAIL and SEMS_PASSWORD environment variables first.")
-        print('  export SEMS_EMAIL="you@example.com"')
-        print('  export SEMS_PASSWORD="your sems portal password"')
+        print("  export SEMS_EMAIL='you@example.com'")
+        print("  export SEMS_PASSWORD='your sems portal password'")
+        print(
+            "  (use SINGLE quotes - a $ in a double-quoted password gets "
+            "expanded by the shell and silently corrupts it)"
+        )
         sys.exit(1)
 
     if len(sys.argv) < 2:
@@ -460,7 +587,7 @@ def main() -> None:
     token = login(email, password)
 
     if command == "discover":
-        cmd_discover(token)
+        cmd_discover(token, sys.argv[2] if len(sys.argv) > 2 else None)
     elif command == "stations":
         cmd_stations(token)
     elif command == "status":
@@ -474,12 +601,14 @@ def main() -> None:
     elif command == "start":
         sn = resolve_sn(token)
         confirm(f"send a START command to inverter {sn}")
-        start_inverter(token, sn)
+        response = start_inverter(token, sn)
+        _print_response_and_check_remote_control(token, sn, response)
         print(f"Start command sent for {sn}. Grid-sync can take a few minutes.")
     elif command == "stop":
         sn = resolve_sn(token)
         confirm(f"send a STOP command to inverter {sn}")
-        stop_inverter(token, sn)
+        response = stop_inverter(token, sn)
+        _print_response_and_check_remote_control(token, sn, response)
         print(f"Stop command sent for {sn}.")
     elif command == "raw":
         if len(sys.argv) < 3:

@@ -5,17 +5,32 @@ automations need, through Settings -> Devices & Services -> Add
 Integration, rather than install.sh prompting for any of it at the
 terminal.
 
-The inverter serial number and rated capacity are no longer typed in by
-hand - login succeeds, then api.py's discover_inverter() finds the
-account's power station and inverter automatically (see api.py for the two
-SEMS Portal endpoints this uses). Only the sizing values that AREN'T
-discoverable this way (battery max charge rate, load threshold, full SOC
-threshold) are still asked for on the form. Battery capacity isn't asked
-for either - it's read live from the baseline Amber integration's Battery
-Capacity sensor at automation runtime, the same way state of charge is. A "Refresh
-Inverter Info" button (button.py) re-runs discovery later, for the rare
-case the inverter is swapped or the SEMS Portal starts reporting different
-values.
+Inverter discovery has two paths, tried in order:
+
+  1. Full auto (api.py's discover_inverter()) - looks up the account's
+     power stations, then the first station's inverter, giving us the
+     serial number, rated capacity, AND a station name/id for a nicer
+     title. This is the preferred path when it works.
+
+  2. Manual serial number fallback (async_step_inverter_sn below, using
+     api.py's discover_by_serial()) - used when step 1's login succeeds
+     but the station-list lookup comes back with an empty list. This is a
+     REAL, CONFIRMED failure mode (Sept 2026), not a hypothetical one: the
+     account-level station list endpoint can return a clean empty
+     response while device-level, serial-number-keyed endpoints (status,
+     set_power_limit, start/stop) keep working fine. When this happens,
+     the flow asks for the inverter's serial number directly (printed on
+     the inverter's label, or visible in the SEMS+ app) and validates it
+     via the still-working per-device endpoint instead. Only rated
+     capacity comes back this way - no station name/id.
+
+Only the sizing values that AREN'T discoverable either way (battery max
+charge rate, load threshold, full SOC threshold) are asked for on the
+first form. Battery capacity isn't asked for either - it's read live from
+the baseline Amber integration's Battery Capacity sensor at automation
+runtime, the same way state of charge is. A "Refresh Inverter Info" button
+(button.py) re-runs discovery later, for the rare case the inverter is
+swapped or the SEMS Portal starts reporting different values.
 """
 
 from __future__ import annotations
@@ -30,7 +45,6 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .api import SemsApi, SemsApiError, SemsAuthError
-from .helpers import async_apply_sizing
 from .const import (
     CONF_BATTERY_MAX_CHARGE_RATE_W,
     CONF_FULL_SOC_THRESHOLD,
@@ -52,6 +66,7 @@ from .const import (
     MIN_FULL_SOC_THRESHOLD,
     MIN_LOAD_THRESHOLD_W,
 )
+from .helpers import async_apply_sizing
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -113,17 +128,41 @@ def _build_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     )
 
 
+def _serial_schema(default_sn: str = "") -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(CONF_INVERTER_SN, default=default_sn): selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
+            )
+        }
+    )
+
+
 def _clean(user_input: dict[str, Any]) -> dict[str, Any]:
     data = dict(user_input)
     data[CONF_SEMS_EMAIL] = data[CONF_SEMS_EMAIL].strip()
     return data
 
 
+def _merge_discovered(data: dict[str, Any], discovered: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **data,
+        CONF_POWERSTATION_ID: discovered["powerstation_id"],
+        CONF_STATION_NAME: discovered["station_name"],
+        CONF_INVERTER_SN: discovered["inverter_sn"],
+        CONF_INVERTER_CAPACITY_W: discovered["inverter_capacity_w"],
+    }
+
+
 async def _async_login_and_discover(
     hass, email: str, password: str
 ) -> tuple[dict[str, Any] | None, str | None]:
-    """Log in and discover the inverter. Returns (discovered, None) on
-    success or (None, error_key) on failure."""
+    """Log in and discover the inverter via the full-auto (station-list)
+    path. Returns (discovered, None) on success or (None, error_key) on
+    failure. error_key "discovery_failed" specifically means login worked
+    but the station list came back empty - callers should offer the manual
+    serial-number fallback for that case rather than treating it as fatal.
+    """
     if not email or not password:
         return None, "missing_fields"
     api = SemsApi(email, password)
@@ -139,7 +178,7 @@ async def _async_login_and_discover(
             # transient hiccup, and give the user a clear retry message.
             _LOGGER.info("SEMS Portal timed out during setup: %s", msg)
             return None, "cannot_connect"
-        _LOGGER.warning("SEMS Portal discovery failed: %s", msg)
+        _LOGGER.info("Station-list discovery failed, will offer manual serial entry: %s", msg)
         return None, "discovery_failed"
     except Exception:  # noqa: BLE001
         _LOGGER.exception("Unexpected error discovering SEMS inverter")
@@ -147,7 +186,73 @@ async def _async_login_and_discover(
     return discovered, None
 
 
-class SemsCurtailmentConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+async def _async_discover_by_serial(
+    hass, email: str, password: str, inverter_sn: str
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Validate a manually-entered serial number via the still-working
+    per-device endpoint. Returns (discovered, None) or (None, error_key).
+    """
+    sn = inverter_sn.strip()
+    if not sn:
+        return None, "missing_serial"
+    api = SemsApi(email, password)
+    try:
+        discovered = await hass.async_add_executor_job(api.discover_by_serial, sn)
+    except SemsAuthError:
+        return None, "invalid_auth"
+    except SemsApiError as err:
+        msg = str(err)
+        if "timed out" in msg:
+            _LOGGER.info("SEMS Portal timed out during serial lookup: %s", msg)
+            return None, "cannot_connect"
+        _LOGGER.warning("Manual serial number lookup failed: %s", err)
+        return None, "serial_lookup_failed"
+    except Exception:  # noqa: BLE001
+        _LOGGER.exception("Unexpected error looking up SEMS inverter by serial")
+        return None, "unknown"
+    return discovered, None
+
+
+class _InverterSnFallbackMixin:
+    """Shared manual-serial-number step for both flows below.
+
+    Subclasses store the already-validated email/password/sizing in
+    self._pending_data before transitioning here, and implement
+    _finalize(discovered) to turn a successful lookup into the flow's
+    result (creating or updating the config entry).
+    """
+
+    _pending_data: dict[str, Any]
+    hass: Any  # provided by ConfigFlow/OptionsFlow base classes
+
+    async def async_step_inverter_sn(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            discovered, error = await _async_discover_by_serial(
+                self.hass,
+                self._pending_data[CONF_SEMS_EMAIL],
+                self._pending_data[CONF_SEMS_PASSWORD],
+                user_input[CONF_INVERTER_SN],
+            )
+            if error:
+                errors["base"] = error
+            else:
+                assert discovered is not None
+                return await self._finalize(discovered)  # type: ignore[attr-defined]
+
+        return self.async_show_form(  # type: ignore[attr-defined]
+            step_id="inverter_sn",
+            data_schema=_serial_schema((user_input or {}).get(CONF_INVERTER_SN, "")),
+            errors=errors,
+        )
+
+
+class SemsCurtailmentConfigFlow(
+    _InverterSnFallbackMixin, config_entries.ConfigFlow, domain=DOMAIN
+):
     """Handle the initial setup - SEMS login and sizing; inverter is discovered."""
 
     VERSION = 1
@@ -162,28 +267,26 @@ class SemsCurtailmentConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             discovered, error = await _async_login_and_discover(
                 self.hass, data[CONF_SEMS_EMAIL], data[CONF_SEMS_PASSWORD]
             )
+            if error == "discovery_failed":
+                self._pending_data = data
+                return await self.async_step_inverter_sn()
             if error:
                 errors["base"] = error
             else:
                 assert discovered is not None
-                data.update(
-                    {
-                        CONF_POWERSTATION_ID: discovered["powerstation_id"],
-                        CONF_STATION_NAME: discovered["station_name"],
-                        CONF_INVERTER_SN: discovered["inverter_sn"],
-                        CONF_INVERTER_CAPACITY_W: discovered["inverter_capacity_w"],
-                    }
-                )
-                await self.async_set_unique_id(discovered["inverter_sn"])
-                self._abort_if_unique_id_configured()
-                title = discovered["station_name"] or discovered["inverter_sn"]
-                return self.async_create_entry(
-                    title=f"SEMS Curtailment ({title})", data=data
-                )
+                self._pending_data = data
+                return await self._finalize(discovered)
 
         return self.async_show_form(
             step_id="user", data_schema=_build_schema(user_input), errors=errors
         )
+
+    async def _finalize(self, discovered: dict[str, Any]) -> config_entries.ConfigFlowResult:
+        data = _merge_discovered(self._pending_data, discovered)
+        await self.async_set_unique_id(discovered["inverter_sn"])
+        self._abort_if_unique_id_configured()
+        title = discovered["station_name"] or discovered["inverter_sn"]
+        return self.async_create_entry(title=f"SEMS Curtailment ({title})", data=data)
 
     @staticmethod
     @callback
@@ -193,12 +296,13 @@ class SemsCurtailmentConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return SemsCurtailmentOptionsFlow(config_entry)
 
 
-class SemsCurtailmentOptionsFlow(config_entries.OptionsFlow):
+class SemsCurtailmentOptionsFlow(_InverterSnFallbackMixin, config_entries.OptionsFlow):
     """Update SEMS login / sizing later, without deleting and re-adding the
     integration - e.g. after a SEMS Portal password change, or swapping in
-    a bigger battery. Re-runs inverter discovery too, same as initial setup
-    (use the "Refresh Inverter Info" button instead if login is unchanged
-    and you only want to re-check the inverter).
+    a bigger battery. Re-runs inverter discovery too (falling back to a
+    manual serial number the same way initial setup does, if needed) - use
+    the "Refresh Inverter Info" button instead if login is unchanged and
+    you only want to re-check the inverter.
     """
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
@@ -214,32 +318,32 @@ class SemsCurtailmentOptionsFlow(config_entries.OptionsFlow):
             discovered, error = await _async_login_and_discover(
                 self.hass, data[CONF_SEMS_EMAIL], data[CONF_SEMS_PASSWORD]
             )
+            if error == "discovery_failed":
+                self._pending_data = data
+                return await self.async_step_inverter_sn()
             if error:
                 errors["base"] = error
             else:
                 assert discovered is not None
-                data.update(
-                    {
-                        CONF_POWERSTATION_ID: discovered["powerstation_id"],
-                        CONF_STATION_NAME: discovered["station_name"],
-                        CONF_INVERTER_SN: discovered["inverter_sn"],
-                        CONF_INVERTER_CAPACITY_W: discovered["inverter_capacity_w"],
-                    }
-                )
-                title = discovered["station_name"] or discovered["inverter_sn"]
-                self.hass.config_entries.async_update_entry(
-                    self._entry, title=f"SEMS Curtailment ({title})", data=data
-                )
-                # Push the submitted sizing onto the number entities. Done
-                # here rather than from a config-entry update listener so
-                # that only an explicit form submission overwrites them -
-                # a listener would also fire for the Refresh Inverter Info
-                # button and reset values the user had hand-tuned.
-                await async_apply_sizing(self.hass, self._entry)
-                return self.async_create_entry(title="", data={})
+                self._pending_data = data
+                return await self._finalize(discovered)
 
         return self.async_show_form(
             step_id="init",
             data_schema=_build_schema(user_input or self._entry.data),
             errors=errors,
         )
+
+    async def _finalize(self, discovered: dict[str, Any]) -> config_entries.ConfigFlowResult:
+        data = _merge_discovered(self._pending_data, discovered)
+        title = discovered["station_name"] or discovered["inverter_sn"]
+        self.hass.config_entries.async_update_entry(
+            self._entry, title=f"SEMS Curtailment ({title})", data=data
+        )
+        # Push the submitted sizing onto the number entities. Done here
+        # rather than from a config-entry update listener so that only an
+        # explicit form submission overwrites them - a listener would also
+        # fire for the Refresh Inverter Info button and reset values the
+        # user had hand-tuned.
+        await async_apply_sizing(self.hass, self._entry)
+        return self.async_create_entry(title="", data={})

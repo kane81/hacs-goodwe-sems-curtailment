@@ -36,7 +36,7 @@ The price-driven curtailment automations, plus a dashboard.
 ## Requirements
 
 - The **[baseline Amber integration](https://github.com/kane81/hacs-custom-amber-integration)** installed and signed in
-- A **GoodWe inverter** registered on the SEMS Portal (au.semsportal.com), with remote control enabled on the account
+- A **GoodWe inverter** registered on the SEMS Portal (au.semsportal.com), with remote control enabled on the account — check the **Remote Control Enabled** sensor after setup if commands don't seem to be taking effect; see [Troubleshooting](#troubleshooting)
 - **Home Assistant 2024.1** or newer, with [HACS](https://hacs.xyz/) installed
 - A **terminal client** — Advanced SSH & Web Terminal add-on, or `docker exec` — required for Part 2's `install.sh` and the command-line tool
 - *Optional* — the Amber integration's Power sensors configured, for accurate SOC-based curtailment sizing. See [Power sensors](#power-sensors) in the appendix.
@@ -71,7 +71,7 @@ If a dialog offers a different integration first, select **Cancel**, search agai
 
 **Full SOC threshold** — the battery percentage above which the battery is treated as full. As a battery approaches full, its charge rate tapers, so the headroom curtailment reserves for charging shrinks with it. Above this threshold, curtailment targets house load only.
 
-The login is verified against the SEMS Portal before the entry is created. The inverter serial number and rated capacity are then discovered automatically, and battery capacity is read live from `sensor.amber_smart_shift_battery_capacity` — none of these are entered by hand. To update the login or sizing later, open the integration's card and select **Configure**.
+The login is verified against the SEMS Portal before the entry is created. The inverter serial number and rated capacity are then usually discovered automatically, and battery capacity is read live from `sensor.amber_smart_shift_battery_capacity` — none of these are entered by hand. If automatic inverter lookup fails (a known intermittent SEMS Portal issue — the account-level station list can return an empty result even while the inverter itself is reachable), you'll be asked for the serial number directly on a second screen; it's printed on the inverter's label, or visible in the SEMS+ app. To update the login, sizing, or inverter later, open the integration's card and select **Configure**.
 
 ---
 
@@ -125,12 +125,12 @@ Done — a fully UI-editable dashboard with the same layout as the auto-installe
 `scripts/sems_cli.py` calls the SEMS Portal directly from a terminal — the same API operations the integration uses, without Home Assistant in the loop. Standard library only; runs anywhere with Python 3.9+.
 
 ```
-export SEMS_EMAIL="you@example.com"
-export SEMS_PASSWORD="your sems portal password"
+export SEMS_EMAIL='you@example.com'
+export SEMS_PASSWORD='your sems portal password'
 
 python3 sems_cli.py discover     # station + inverter serial, model, capacity
 python3 sems_cli.py stations     # every power station on the account
-python3 sems_cli.py status       # Working / Waiting / Offline, last report
+python3 sems_cli.py status       # Working / Waiting / Offline + remote control check
 python3 sems_cli.py detail       # live PV/battery/grid/load snapshot
 python3 sems_cli.py limit 50     # set output limit to 50%
 python3 sems_cli.py stop --yes   # stop the inverter (asks first without --yes)
@@ -138,7 +138,9 @@ python3 sems_cli.py start        # start the inverter
 python3 sems_cli.py raw inverter '{"sn": "..."}'   # dump a raw response
 ```
 
-Optionally `export SEMS_INVERTER_SN="..."` to skip the station lookup on commands that need a serial number. `limit`, `start`, and `stop` change the inverter's actual behaviour; a limit set here may be overwritten by Automatic Curtailment on its next evaluation.
+**Use single quotes around the password, not double quotes.** In bash/zsh, a `$` inside double quotes tries to expand a variable — a password like `VJ9CeF05e$rkm5F` silently becomes `VJ9CeF05e` (everything from the `$` onward just disappears), with no error, just a confusing login failure. Single quotes disable that expansion entirely.
+
+Optionally `export SEMS_INVERTER_SN='...'` to skip the station lookup on commands that need a serial number, or `discover <serial_number>` to look one up directly if the station-list lookup returns nothing (see [Troubleshooting](#troubleshooting)). `limit`, `start`, and `stop` change the inverter's actual behaviour; a limit set here may be overwritten by Automatic Curtailment on its next evaluation.
 
 ### Send Start/Stop Inverter Command
 
@@ -150,6 +152,8 @@ Two buttons on the integration's device page (not the dashboard) for directly st
 
 **No entities on the device page** — setup did not complete. Open the integration's card; if it shows an error state, select **Configure** and re-enter the SEMS Portal credentials.
 
+**Setup asks for the inverter serial number instead of finding it automatically** — this is expected, not an error. The SEMS Portal's account-level station list can return an empty result intermittently while everything else keeps working fine. Enter the serial number from the inverter's label or the SEMS+ app and setup continues normally with full functionality — only the automatic station name/id lookup is skipped.
+
 **"Missing Dependency" notification** — the baseline Amber integration is not installed or not yet providing price data.
 
 **"Power Sensors Not Configured" notification** — the Amber integration's Power sensor helpers are blank. See [Power sensors](#power-sensors).
@@ -157,6 +161,8 @@ Two buttons on the integration's device page (not the dashboard) for directly st
 **Curtailment never triggers** — confirm Automatic Curtailment is on and `sensor.amber_smart_shift_sell_price` is actually negative (**Developer Tools → States**).
 
 **SEMS API calls failing** — press **Refresh Inverter Info** on the device page, or re-enter the SEMS Portal password via **Configure** if it has changed.
+
+**Curtailment/limit/start/stop commands return success but the inverter doesn't respond** — press **Check Inverter Status** and look at the **Remote Control Enabled** sensor. If it shows *Disabled*, this is the cause: the SEMS Portal accepts and acknowledges the command without ever forwarding it to the inverter, and there's no error for this project to catch on its end. This is an account/inverter permission set on GoodWe's side, not a setting in Home Assistant — contact your installer or GoodWe support to have remote control enabled for the device. The command-line tool's `status` command shows the same thing and prints a warning automatically when it's off.
 
 **Restart blocked by an invalid configuration.yaml** — re-run `install.sh`; it detects and repairs the misplaced dashboard entry an earlier version of the installer could leave behind, and validates the file before restarting.
 
@@ -195,6 +201,7 @@ Then remove the integration under **Settings → Devices & Services** (this dele
 - `sensor.sems_curtailment_inverter_serial_number`
 - `sensor.sems_curtailment_sems_station`
 - `sensor.sems_curtailment_inverter_status` — *Unknown* until Check Inverter Status is pressed; never polled automatically
+- `sensor.sems_curtailment_remote_control_enabled` — whether the SEMS Portal will actually relay commands to this inverter; see [Troubleshooting](#troubleshooting) above if it shows *Disabled*
 
 #### Buttons
 

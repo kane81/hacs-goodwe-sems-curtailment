@@ -23,6 +23,7 @@ convention the baseline Amber integration uses for its own blocking calls.
 from __future__ import annotations
 
 import json
+import re
 import ssl
 import urllib.error
 import urllib.request
@@ -99,6 +100,23 @@ def _post(url: str, body: dict, token: str) -> dict:
         raise SemsApiError(f"Could not reach SEMS Portal: {err}") from err
     except json.JSONDecodeError as err:
         raise SemsApiError(f"Unexpected SEMS Portal response: {err}") from err
+
+
+def _parse_capacity_kw(value: str | None) -> int | None:
+    """Parse a capacity string like '10kW' or '10.0 kW' into watts.
+
+    Returns None (never raises) on anything that doesn't match, so callers
+    decide whether a missing/malformed value is an error in their context.
+    """
+    if not value:
+        return None
+    match = re.match(r"\s*([\d.]+)\s*kW", value, re.IGNORECASE)
+    if not match:
+        return None
+    try:
+        return int(round(float(match.group(1)) * 1000))
+    except ValueError:
+        return None
 
 
 def _check_code(data: dict, what: str) -> dict:
@@ -258,18 +276,65 @@ class SemsApi:
             "inverter_capacity_w": int(round(capacity_kw * 1000)),
         }
 
+    def discover_by_serial(self, inverter_sn: str) -> dict[str, Any]:
+        """Look up inverter capacity directly by serial number, without
+        going through the account's power-station list first.
+
+        Fallback for when the station-list lookup discover_inverter() uses
+        (QueryPowerStationMonitorForAppDod) returns a successful response
+        with an EMPTY list - a real, confirmed failure mode (Sept 2026),
+        not a hypothetical one. GetInverterKvBySnForApp is keyed purely by
+        serial number, so it keeps working regardless of whether the
+        account-level station list is behaving - this is the same
+        observation that explains why status/limit/start/stop can keep
+        working from the CLI even when `discover`/`stations` return
+        nothing.
+
+        Requires the caller to already know the serial number - there's no
+        way to find it without SOME account-level lookup, so if the
+        station list is down, it has to come from the inverter's physical
+        label or the SEMS+ app itself. powerstation_id/station_name are
+        None in the returned dict (not obtainable via this path) - callers
+        should treat that as "unknown", not as an error.
+        """
+        status = self.get_inverter_status(inverter_sn)
+        capacity_w = _parse_capacity_kw(status.get("capacity"))
+        if capacity_w is None:
+            raise SemsApiError(
+                f"Could not determine inverter capacity from "
+                f"'{status.get('capacity')}' - inverter serial number may be wrong"
+            )
+        return {
+            "powerstation_id": None,
+            "station_name": None,
+            "inverter_sn": inverter_sn,
+            "inverter_capacity_w": capacity_w,
+        }
+
     def get_inverter_status(self, inverter_sn: str) -> dict[str, Any]:
-        """Check whether the inverter is currently working/waiting/offline.
+        """Check whether the inverter is currently working/waiting/offline,
+        and whether the account has remote control enabled for it.
 
         Not called automatically anywhere - only from the Check Inverter
         Status button (button.py) and the CLI's `status` command. The SEMS
         Portal API is unofficial and has been unreliable, so this is
         deliberately on-demand only rather than polled on a schedule.
 
-        Returns {status_code, capacity}. status_code is the raw string the
-        portal returns (see const.INVERTER_STATUS_LABELS for the confirmed
-        meaning of each value) - kept as a string rather than mapped to a
-        label here, so api.py stays free of anything HA/entity-specific.
+        Returns {status_code, capacity, remote_control_enabled}.
+        status_code is the raw string the portal returns (see
+        const.INVERTER_STATUS_LABELS for the confirmed meaning of each
+        value) - kept as a string rather than mapped to a label here, so
+        api.py stays free of anything HA/entity-specific.
+
+        remote_control_enabled comes from the response's "canStartIV" field
+        - None if the portal didn't include it (older API responses may
+        not). This matters more than it sounds: when it's False, commands
+        like set_power_limit/start_inverter/stop_inverter can return a
+        clean success response while never actually reaching the inverter
+        - the portal accepts and acknowledges the command, but doesn't
+        forward it to a device that isn't flagged for remote control on
+        that account. That failure mode has no error to catch on our end,
+        which is exactly why it's surfaced here instead.
         """
         data = self._request(
             SEMS_INVERTER_KV_URL,
@@ -283,6 +348,7 @@ class SemsApi:
         return {
             "status_code": str(status_code),
             "capacity": payload.get("capacity"),
+            "remote_control_enabled": payload.get("canStartIV"),
         }
 
     # -- control ------------------------------------------------------------

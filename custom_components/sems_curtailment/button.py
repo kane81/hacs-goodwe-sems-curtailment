@@ -51,6 +51,7 @@ from .const import (
     CONF_STATION_NAME,
     DATA_STATUS_CHECKED_AT,
     DATA_STATUS_CODE,
+    DATA_REMOTE_CONTROL_ENABLED,
     DOMAIN,
     KEY_CHECK_INVERTER_STATUS,
     KEY_INVERTER_CAPACITY_W,
@@ -126,17 +127,51 @@ class SemsRefreshInverterButton(_SemsApiButton):
         super().__init__(hass, entry, REFRESH_INVERTER_INFO.key)
 
     async def async_press(self) -> None:
+        old_sn = self._entry.data.get(CONF_INVERTER_SN)
+        old_capacity = self._entry.data.get(CONF_INVERTER_CAPACITY_W)
+        api = self._api()
+
         try:
-            discovered = await self._hass.async_add_executor_job(
-                self._api().discover_inverter
-            )
+            discovered = await self._hass.async_add_executor_job(api.discover_inverter)
         except SemsAuthError as err:
             raise HomeAssistantError(f"SEMS login failed: {err}") from err
         except SemsApiError as err:
-            raise HomeAssistantError(f"Could not refresh inverter info: {err}") from err
-
-        old_sn = self._entry.data.get(CONF_INVERTER_SN)
-        old_capacity = self._entry.data.get(CONF_INVERTER_CAPACITY_W)
+            # Full-auto discovery's station-list lookup can fail (a real,
+            # confirmed failure mode - Sept 2026) while device-level,
+            # serial-number-keyed endpoints keep working fine. Fall back to
+            # re-checking capacity for the SN we already have on file,
+            # rather than failing the whole refresh outright - this only
+            # works if we already know a serial number (i.e. not the very
+            # first discovery ever), so a first-time failure still surfaces
+            # as an error.
+            if not old_sn:
+                raise HomeAssistantError(
+                    f"Could not refresh inverter info: {err}"
+                ) from err
+            _LOGGER.info(
+                "Full inverter discovery failed (%s) - falling back to "
+                "re-checking known serial number %s",
+                err,
+                old_sn,
+            )
+            try:
+                fallback = await self._hass.async_add_executor_job(
+                    api.discover_by_serial, old_sn
+                )
+            except SemsApiError as fallback_err:
+                raise HomeAssistantError(
+                    f"Could not refresh inverter info: {err}. "
+                    f"Fallback check for the existing serial number also "
+                    f"failed: {fallback_err}"
+                ) from fallback_err
+            # No station-level data available via this path - keep whatever
+            # the entry already has rather than overwriting with unknowns.
+            discovered = {
+                "powerstation_id": self._entry.data.get(CONF_POWERSTATION_ID),
+                "station_name": self._entry.data.get(CONF_STATION_NAME),
+                "inverter_sn": fallback["inverter_sn"],
+                "inverter_capacity_w": fallback["inverter_capacity_w"],
+            }
 
         self._hass.config_entries.async_update_entry(
             self._entry,
@@ -212,6 +247,7 @@ class SemsCheckInverterStatusButton(_SemsApiButton):
         store = self._hass.data[DOMAIN][self._entry.entry_id]
         store[DATA_STATUS_CODE] = result["status_code"]
         store[DATA_STATUS_CHECKED_AT] = datetime.now(timezone.utc).isoformat()
+        store[DATA_REMOTE_CONTROL_ENABLED] = result.get("remote_control_enabled")
         async_dispatcher_send(
             self._hass, SIGNAL_STATUS_UPDATED.format(self._entry.entry_id)
         )

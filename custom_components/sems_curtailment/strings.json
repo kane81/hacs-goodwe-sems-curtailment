@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "GoodWe SEMS Curtailment",
-        "description": "Enter your SEMS Portal login and a few sizing values. Your inverter's serial number and rated capacity are found automatically from your SEMS Portal account once login succeeds, and battery capacity is read from the baseline Amber integration - none of those need to be typed in. If you have more than one power station on this account, the first one returned by the SEMS Portal is used.",
+        "description": "Enter your SEMS Portal login and a few sizing values. Your inverter's serial number and rated capacity are usually found automatically from your SEMS Portal account once login succeeds, and battery capacity is read from the baseline Amber integration - none of those need to be typed in. If automatic lookup doesn't find anything (a known intermittent SEMS Portal issue), you'll be asked for the serial number directly on the next screen. If you have more than one power station on this account, the first one returned by the SEMS Portal is used.",
         "data": {
           "sems_email": "SEMS Portal email",
           "sems_password": "SEMS Portal password",
@@ -18,12 +18,20 @@
           "load_threshold_w": "Minimum change in watts before Load Tracking calls the SEMS API again.",
           "full_soc_threshold": "Battery percentage above which the battery is treated as full. As a battery approaches full, its charge rate tapers off, so the amount of extra solar output curtailment needs to leave room for shrinks too - above this threshold, curtailment stops reserving headroom for battery charging and targets house load only."
         }
+      },
+      "inverter_sn": {
+        "title": "Enter your inverter's serial number",
+        "description": "Your SEMS Portal login worked, but automatically finding your power station didn't - this is a known, intermittent SEMS Portal issue and not something wrong with your account. Enter your inverter's serial number directly: it's printed on the inverter's label, or visible in the SEMS+ app under the device's details screen.",
+        "data": {
+          "sems_inverter_sn": "Inverter serial number"
+        }
       }
     },
     "error": {
       "missing_fields": "SEMS Portal email and password are both required.",
+      "missing_serial": "Enter the inverter's serial number.",
       "invalid_auth": "Could not log in - check your SEMS Portal email and password.",
-      "discovery_failed": "Logged in, but couldn't find a power station or inverter on this account. Check the SEMS Portal app shows your system correctly, then try again.",
+      "serial_lookup_failed": "Could not find an inverter with that serial number. Double-check it against the inverter's label or the SEMS+ app and try again.",
       "cannot_connect": "Could not reach the SEMS Portal, or the request timed out. The SEMS Portal (au.semsportal.com) is known to be intermittently slow — wait a moment and try again.",
       "unknown": "Unexpected error - check the Home Assistant log for details."
     },
@@ -35,7 +43,7 @@
     "step": {
       "init": {
         "title": "Update SEMS Curtailment settings",
-        "description": "Use this to update your SEMS Portal password or change your sizing values (e.g. after a battery upgrade). Inverter details are re-discovered automatically when you save - use the \"Refresh Inverter Info\" button instead if your login hasn't changed and you only want to re-check the inverter.",
+        "description": "Use this to update your SEMS Portal password or change your sizing values (e.g. after a battery upgrade). Inverter details are re-discovered automatically when you save (falling back to asking for the serial number if the automatic lookup doesn't find anything) - use the \"Refresh Inverter Info\" button instead if your login hasn't changed and you only want to re-check the inverter.",
         "data": {
           "sems_email": "SEMS Portal email",
           "sems_password": "SEMS Portal password",
@@ -43,12 +51,20 @@
           "load_threshold_w": "Load change threshold",
           "full_soc_threshold": "Full SOC threshold"
         }
+      },
+      "inverter_sn": {
+        "title": "Enter your inverter's serial number",
+        "description": "Your SEMS Portal login worked, but automatically finding your power station didn't - this is a known, intermittent SEMS Portal issue and not something wrong with your account. Enter your inverter's serial number directly: it's printed on the inverter's label, or visible in the SEMS+ app under the device's details screen.",
+        "data": {
+          "sems_inverter_sn": "Inverter serial number"
+        }
       }
     },
     "error": {
       "missing_fields": "SEMS Portal email and password are both required.",
+      "missing_serial": "Enter the inverter's serial number.",
       "invalid_auth": "Could not log in - check your SEMS Portal email and password.",
-      "discovery_failed": "Logged in, but couldn't find a power station or inverter on this account.",
+      "serial_lookup_failed": "Could not find an inverter with that serial number. Double-check it against the inverter's label or the SEMS+ app and try again.",
       "cannot_connect": "Could not reach the SEMS Portal, or the request timed out. The SEMS Portal (au.semsportal.com) is known to be intermittently slow — wait a moment and try again.",
       "unknown": "Unexpected error - check the Home Assistant log for details."
     }
