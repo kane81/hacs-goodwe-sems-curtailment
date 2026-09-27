@@ -12,7 +12,8 @@
 #   rather than a shell_command/script.
 #
 # How it works:
-#   Amber price sensor updates (or a 5 minute safety poll)
+#   Amber price sensor updates, a change to battery max-charge-rate /
+#   full-SOC threshold / inverter capacity, or a 1 minute safety poll
 #       ↓
 #   Automatic Curtailment on? (switch.sems_curtailment_automatic_curtailment)
 #       ↓ No  → do nothing (safe exit - no API calls made)
@@ -80,8 +81,16 @@
       entity_id: sensor.amber_smart_shift_sell_price
       id: price_change
     - platform: time_pattern
-      minutes: "/5"
+      minutes: "/1"
       id: price_change
+    # Recompute immediately if the sizing inputs change, instead of
+    # waiting for the next price change or the periodic backstop.
+    - platform: state
+      entity_id:
+        - number.sems_curtailment_battery_max_charge_rate
+        - number.sems_curtailment_full_soc_threshold
+        - number.sems_curtailment_inverter_capacity
+      id: config_change
   condition:
     - condition: state
       entity_id: switch.sems_curtailment_automatic_curtailment
@@ -91,6 +100,18 @@
     - condition: template
       value_template: "{{ states('sensor.amber_smart_shift_sell_price') not in ['unknown', 'unavailable'] }}"
   action:
+    # A price sensor can flip within ~1s of another automation reacting
+    # to that same price change (e.g. a load switching off) - the load
+    # reading below can be mid-transition at that instant. Settle briefly
+    # before reading it. Only applies to the actual sensor-driven trigger;
+    # the periodic backstop and a config-number change already read
+    # current state, so they skip the delay.
+    - if:
+        - condition: template
+          value_template: "{{ trigger.id == 'price_change' and trigger.platform == 'state' }}"
+      then:
+        - delay:
+            seconds: 3
     - variables:
         buy_price:  "{{ states('sensor.amber_smart_shift_buy_price')  | float(0) }}"
         sell_price: "{{ states('sensor.amber_smart_shift_sell_price') | float(0) }}"
